@@ -1,0 +1,1680 @@
+#include "ui_manager.h"
+#include <cmath>
+#include <ctime>
+#include <iostream>
+
+#define CELL_SIZE 40
+#define CELL_PADDING 2
+#define BOARD_MARGIN 20
+#define GLOW_RADIUS 15
+
+UIManager::UIManager()
+    : main_window(nullptr), current_screen(nullptr),
+      player_board_area(nullptr), opponent_board_area(nullptr),
+      chat_view(nullptr), status_label(nullptr), timer_label(nullptr), turn_indicator(nullptr),
+      player_board_surface(nullptr), opponent_board_surface(nullptr),
+      player_board(nullptr), opponent_board(nullptr), current_match(nullptr),
+      animation_timer_id(0), glow_pulse(0.0), wave_offset(0.0),
+      selected_ship_type(SHIP_CARRIER), current_orientation(HORIZONTAL),
+      ready_battle_button(nullptr), hover_row(-1), hover_col(-1),
+      is_player_turn(true), shots_fired(0), hits_count(0),
+      shots_label_widget(nullptr), hits_label_widget(nullptr), accuracy_label_widget(nullptr),
+      is_bot_mode(false) {
+    // Initialize ship placement tracking
+    for (int i = 0; i < NUM_SHIPS; i++) {
+        ships_placed[i] = false;
+        ship_status_labels[i] = nullptr;
+    }
+}
+
+UIManager::~UIManager() {
+    if (player_board_surface) {
+        cairo_surface_destroy(player_board_surface);
+    }
+    if (opponent_board_surface) {
+        cairo_surface_destroy(opponent_board_surface);
+    }
+    if (animation_timer_id > 0) {
+        g_source_remove(animation_timer_id);
+    }
+}
+
+void UIManager::initialize(int argc, char* argv[]) {
+    gtk_init(&argc, &argv);
+
+    // Create main window - borderless for modern look
+    main_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(main_window), "BATTLESHIP ONLINE");
+    gtk_window_set_default_size(GTK_WINDOW(main_window), 1400, 800);
+    gtk_window_set_position(GTK_WINDOW(main_window), GTK_WIN_POS_CENTER);
+    gtk_window_set_resizable(GTK_WINDOW(main_window), FALSE);
+
+    // Remove window decorations (title bar) for custom look
+    gtk_window_set_decorated(GTK_WINDOW(main_window), FALSE);
+
+    // Apply nautical maritime theme
+    GtkCssProvider* css_provider = gtk_css_provider_new();
+    const char* css_data =
+        "window {"
+        "   background: linear-gradient(180deg, #004F6B 0%, #002145 100%);"
+        "}"
+        "button {"
+        "   background: linear-gradient(to bottom, #2E8AB0, #059FFD);"
+        "   color: white;"
+        "   border: 2px solid #87CEEB;"
+        "   border-radius: 8px;"
+        "   padding: 12px 24px;"
+        "   font-weight: bold;"
+        "   font-size: 14px;"
+        "}"
+        "button:hover {"
+        "   background: linear-gradient(to bottom, #059FFD, #87CEEB);"
+        "   border-color: #EEDEBA;"
+        "}"
+        "label {"
+        "   color: #EEDEBA;"
+        "   font-size: 14px;"
+        "}"
+        ".title {"
+        "   color: #87CEEB;"
+        "   font-size: 32px;"
+        "   font-weight: bold;"
+        "}"
+        ".glow-text {"
+        "   color: #059FFD;"
+        "   font-size: 18px;"
+        "   font-weight: bold;"
+        "}"
+        "entry {"
+        "   background-color: rgba(0, 33, 69, 0.6);"
+        "   color: #EEDEBA;"
+        "   border: 2px solid #2E8AB0;"
+        "   border-radius: 6px;"
+        "   padding: 10px;"
+        "}"
+        ".danger {"
+        "   background: linear-gradient(to bottom, #D93D1C, #A52A0C);"
+        "   border-color: #FF7F50;"
+        "}"
+        ".secondary {"
+        "   background: linear-gradient(to bottom, #737A85, #40454D);"
+        "   border-color: #ABD6E6;"
+        "}";
+
+    gtk_css_provider_load_from_data(css_provider, css_data, -1, NULL);
+    gtk_style_context_add_provider_for_screen(
+        gdk_screen_get_default(),
+        GTK_STYLE_PROVIDER(css_provider),
+        GTK_STYLE_PROVIDER_PRIORITY_USER
+    );
+
+    // Connect destroy signal
+    g_signal_connect(main_window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+
+    // Start animation timer - slower to reduce CPU usage
+    animation_timer_id = g_timeout_add(100, animationCallback, this);
+
+    // Show main menu by default
+    showScreen(SCREEN_MAIN_MENU);
+
+    gtk_widget_show_all(main_window);
+}
+
+void UIManager::showScreen(UIScreen screen) {
+    // Remove current screen
+    if (current_screen) {
+        gtk_widget_destroy(current_screen);
+        current_screen = nullptr;
+    }
+
+    // Create new screen
+    switch (screen) {
+        case SCREEN_MAIN_MENU:
+            current_screen = createMainMenuScreen();
+            break;
+        case SCREEN_LOGIN:
+            current_screen = createLoginScreen();
+            break;
+        case SCREEN_REGISTER:
+            current_screen = createRegisterScreen();
+            break;
+        case SCREEN_LOBBY:
+            current_screen = createLobbyScreen();
+            break;
+        case SCREEN_SHIP_PLACEMENT:
+            current_screen = createShipPlacementScreen();
+            break;
+        case SCREEN_GAME:
+            current_screen = createGameScreen();
+            break;
+        case SCREEN_REPLAY:
+            current_screen = createReplayScreen();
+            break;
+        case SCREEN_PROFILE:
+            current_screen = createProfileScreen();
+            break;
+    }
+
+    if (current_screen) {
+        gtk_container_add(GTK_CONTAINER(main_window), current_screen);
+        gtk_widget_show_all(main_window);
+    }
+}
+
+GtkWidget* UIManager::createGameScreen() {
+    // Main container
+    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+
+    // Header
+    GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    gtk_widget_set_margin_start(header, 20);
+    gtk_widget_set_margin_end(header, 20);
+    gtk_widget_set_margin_top(header, 10);
+    gtk_widget_set_margin_bottom(header, 10);
+
+    // Logo and title
+    GtkWidget* title_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget* logo_label = gtk_label_new("⚓");
+    gtk_widget_set_name(logo_label, "logo");
+    GtkWidget* title_label = gtk_label_new("BATTLESHIP ONLINE");
+    GtkStyleContext* title_context = gtk_widget_get_style_context(title_label);
+    gtk_style_context_add_class(title_context, "title");
+    gtk_box_pack_start(GTK_BOX(title_box), logo_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(title_box), title_label, FALSE, FALSE, 0);
+
+    // User info
+    GtkWidget* user_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    GtkWidget* elo_label = gtk_label_new("⭐ ELO: 1250");
+    GtkWidget* winrate_label = gtk_label_new("🏆 68%");
+    GtkWidget* username_label = gtk_label_new("👤 Player_001");
+
+    GtkStyleContext* elo_context = gtk_widget_get_style_context(elo_label);
+    gtk_style_context_add_class(elo_context, "glow-text");
+
+    gtk_box_pack_start(GTK_BOX(user_box), elo_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(user_box), winrate_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(user_box), username_label, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(header), title_box, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(header), user_box, FALSE, FALSE, 0);
+
+    // Game content
+    GtkWidget* content_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    gtk_widget_set_margin_start(content_box, 20);
+    gtk_widget_set_margin_end(content_box, 20);
+    gtk_box_set_homogeneous(GTK_BOX(content_box), FALSE);
+
+    // Left panel - Player board
+    GtkWidget* left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget* player_label = gtk_label_new("YOUR FLEET");
+    GtkStyleContext* player_label_context = gtk_widget_get_style_context(player_label);
+    gtk_style_context_add_class(player_label_context, "glow-text");
+
+    player_board_area = gtk_drawing_area_new();
+    gtk_widget_set_size_request(player_board_area,
+                                BOARD_SIZE * CELL_SIZE + BOARD_MARGIN * 2,
+                                BOARD_SIZE * CELL_SIZE + BOARD_MARGIN * 2);
+    gtk_widget_add_events(player_board_area,
+                         GDK_BUTTON_PRESS_MASK | GDK_POINTER_MOTION_MASK);
+    g_signal_connect(player_board_area, "draw", G_CALLBACK(on_board_draw), this);
+
+    GtkWidget* ships_status_label = gtk_label_new(
+        "Aircraft Carrier [#####]\n"
+        "Battleship [####]\n"
+        "Cruiser [###]\n"
+        "Submarine [###]\n"
+        "Destroyer [##]"
+    );
+    gtk_label_set_justify(GTK_LABEL(ships_status_label), GTK_JUSTIFY_LEFT);
+
+    gtk_box_pack_start(GTK_BOX(left_panel), player_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(left_panel), player_board_area, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(left_panel), ships_status_label, FALSE, FALSE, 0);
+
+    // Center panel - Match info
+    GtkWidget* center_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 15);
+    gtk_widget_set_size_request(center_panel, 400, -1);
+
+    // Timer
+    timer_label = gtk_label_new("TIME: 00:45");
+    GtkStyleContext* timer_context = gtk_widget_get_style_context(timer_label);
+    gtk_style_context_add_class(timer_context, "title");
+
+    // Turn indicator
+    turn_indicator = gtk_label_new("» YOUR TURN «");
+    GtkStyleContext* turn_context = gtk_widget_get_style_context(turn_indicator);
+    gtk_style_context_add_class(turn_context, "glow-text");
+
+    // Match stats
+    GtkWidget* stats_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_set_homogeneous(GTK_BOX(stats_box), TRUE);
+
+    shots_label_widget = gtk_label_new("Shots\n0");
+    hits_label_widget = gtk_label_new("Hits\n0");
+    accuracy_label_widget = gtk_label_new("Accuracy\n0%");
+
+    gtk_box_pack_start(GTK_BOX(stats_box), shots_label_widget, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(stats_box), hits_label_widget, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(stats_box), accuracy_label_widget, TRUE, TRUE, 0);
+
+    // Action buttons
+    GtkWidget* btn_fire = gtk_button_new_with_label("FIRE!");
+    GtkWidget* btn_pause = gtk_button_new_with_label("Pause");
+    GtkWidget* btn_draw = gtk_button_new_with_label("Offer Draw");
+    GtkWidget* btn_resign = gtk_button_new_with_label("Resign");
+
+    GtkStyleContext* btn_resign_context = gtk_widget_get_style_context(btn_resign);
+    gtk_style_context_add_class(btn_resign_context, "danger");
+
+    GtkStyleContext* btn_pause_context = gtk_widget_get_style_context(btn_pause);
+    gtk_style_context_add_class(btn_pause_context, "secondary");
+
+    GtkStyleContext* btn_draw_context = gtk_widget_get_style_context(btn_draw);
+    gtk_style_context_add_class(btn_draw_context, "secondary");
+
+    g_signal_connect(btn_fire, "clicked", G_CALLBACK(on_fire_clicked), this);
+    g_signal_connect(btn_pause, "clicked", G_CALLBACK(on_pause_clicked), this);
+    g_signal_connect(btn_draw, "clicked", G_CALLBACK(on_draw_offer_clicked), this);
+    g_signal_connect(btn_resign, "clicked", G_CALLBACK(on_resign_clicked), this);
+
+    // Chat
+    GtkWidget* chat_frame = gtk_frame_new("Chat");
+    GtkWidget* chat_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+
+    chat_view = gtk_text_view_new();
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(chat_view), FALSE);
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(chat_view), GTK_WRAP_WORD);
+    gtk_widget_set_size_request(chat_view, -1, 150);
+
+    GtkWidget* chat_scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(chat_scroll), chat_view);
+
+    GtkWidget* chat_input_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    GtkWidget* chat_entry = gtk_entry_new();
+    GtkWidget* chat_send_btn = gtk_button_new_with_label("Send");
+    gtk_widget_set_size_request(chat_send_btn, 50, -1);
+
+    gtk_box_pack_start(GTK_BOX(chat_input_box), chat_entry, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(chat_input_box), chat_send_btn, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(chat_box), chat_scroll, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(chat_box), chat_input_box, FALSE, FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(chat_frame), chat_box);
+
+    // Pack center panel
+    gtk_box_pack_start(GTK_BOX(center_panel), timer_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(center_panel), turn_indicator, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(center_panel), stats_box, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(center_panel), btn_fire, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(center_panel), btn_pause, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(center_panel), btn_draw, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(center_panel), btn_resign, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(center_panel), chat_frame, TRUE, TRUE, 0);
+
+    // Right panel - Opponent board
+    GtkWidget* right_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget* opponent_label = gtk_label_new("ENEMY WATERS");
+    GtkStyleContext* opponent_label_context = gtk_widget_get_style_context(opponent_label);
+    gtk_style_context_add_class(opponent_label_context, "glow-text");
+
+    opponent_board_area = gtk_drawing_area_new();
+    gtk_widget_set_size_request(opponent_board_area,
+                                BOARD_SIZE * CELL_SIZE + BOARD_MARGIN * 2,
+                                BOARD_SIZE * CELL_SIZE + BOARD_MARGIN * 2);
+    gtk_widget_add_events(opponent_board_area,
+                         GDK_BUTTON_PRESS_MASK | GDK_POINTER_MOTION_MASK);
+    g_signal_connect(opponent_board_area, "draw", G_CALLBACK(on_board_draw), this);
+    g_signal_connect(opponent_board_area, "button-press-event",
+                    G_CALLBACK(on_board_button_press), this);
+
+    GtkWidget* opponent_info_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    GtkWidget* opponent_name = gtk_label_new("Opponent_999");
+    GtkWidget* opponent_elo = gtk_label_new("ELO: 1180");
+    GtkWidget* opponent_winrate = gtk_label_new("WIN RATE: 65%");
+
+    gtk_box_pack_start(GTK_BOX(opponent_info_box), opponent_name, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(opponent_info_box), opponent_elo, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(opponent_info_box), opponent_winrate, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(right_panel), opponent_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(right_panel), opponent_board_area, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(right_panel), opponent_info_box, FALSE, FALSE, 0);
+
+    // Pack all panels
+    gtk_box_pack_start(GTK_BOX(content_box), left_panel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), center_panel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), right_panel, FALSE, FALSE, 0);
+
+    // Footer
+    GtkWidget* footer = gtk_label_new("🎮 Battleship Online v1.0 | Match ID: #BT-12345 | 📡 Ping: 45ms");
+    gtk_widget_set_margin_top(footer, 10);
+    gtk_widget_set_margin_bottom(footer, 10);
+
+    // Pack everything
+    gtk_box_pack_start(GTK_BOX(main_box), header, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), content_box, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), footer, FALSE, FALSE, 0);
+
+    return main_box;
+}
+
+void UIManager::renderPlayerBoard(cairo_t* cr) {
+    if (!player_board) return;
+    drawBoard(cr, player_board, true);
+
+    // Draw ship placement preview (only in ship placement mode)
+    if (ready_battle_button && hover_row >= 0 && hover_col >= 0 && !ships_placed[selected_ship_type]) {
+        int length = getShipLength(selected_ship_type);
+        Coordinate pos;
+        pos.row = hover_row;
+        pos.col = hover_col;
+
+        // Check if placement is valid
+        bool valid = player_board->isValidPlacement(selected_ship_type, pos, current_orientation);
+
+        // Draw preview of ship
+        cairo_set_line_width(cr, 2.0);
+        for (int i = 0; i < length; i++) {
+            int r = hover_row + (current_orientation == VERTICAL ? i : 0);
+            int c = hover_col + (current_orientation == HORIZONTAL ? i : 0);
+
+            if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
+                double x = BOARD_MARGIN + c * CELL_SIZE;
+                double y = BOARD_MARGIN + r * CELL_SIZE;
+
+                // Draw preview box (green if valid, red if invalid)
+                if (valid) {
+                    cairo_set_source_rgba(cr, 0.0, 1.0, 0.0, 0.3);  // Green semi-transparent
+                } else {
+                    cairo_set_source_rgba(cr, 1.0, 0.0, 0.0, 0.3);  // Red semi-transparent
+                }
+                cairo_rectangle(cr, x + CELL_PADDING, y + CELL_PADDING,
+                              CELL_SIZE - CELL_PADDING * 2, CELL_SIZE - CELL_PADDING * 2);
+                cairo_fill(cr);
+
+                // Draw border
+                if (valid) {
+                    cairo_set_source_rgb(cr, 0.0, 1.0, 0.0);  // Green
+                } else {
+                    cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);  // Red
+                }
+                cairo_rectangle(cr, x + CELL_PADDING, y + CELL_PADDING,
+                              CELL_SIZE - CELL_PADDING * 2, CELL_SIZE - CELL_PADDING * 2);
+                cairo_stroke(cr);
+            }
+        }
+    }
+}
+
+void UIManager::renderOpponentBoard(cairo_t* cr) {
+    if (!opponent_board) return;
+    drawBoard(cr, opponent_board, false);
+}
+
+void UIManager::drawBoard(cairo_t* cr, Board* board, bool is_player_board) {
+    int width = BOARD_SIZE * CELL_SIZE + BOARD_MARGIN * 2;
+    int height = BOARD_SIZE * CELL_SIZE + BOARD_MARGIN * 2;
+
+    // Draw animated wave background
+    drawWaveBackground(cr, width, height);
+
+    // Draw grid
+    for (int row = 0; row < BOARD_SIZE; row++) {
+        for (int col = 0; col < BOARD_SIZE; col++) {
+            double x = BOARD_MARGIN + col * CELL_SIZE;
+            double y = BOARD_MARGIN + row * CELL_SIZE;
+
+            CellState state = board->getCell(row, col);
+            drawCell(cr, row, col, state, is_player_board);
+
+            // Draw grid lines with ocean foam color
+            cairo_set_source_rgba(cr, ColorScheme::NAVAL_BLUE_R,
+                                     ColorScheme::NAVAL_BLUE_G,
+                                     ColorScheme::NAVAL_BLUE_B, 0.5);
+            cairo_set_line_width(cr, 1.5);
+            cairo_rectangle(cr, x, y, CELL_SIZE, CELL_SIZE);
+            cairo_stroke(cr);
+        }
+    }
+
+    // Draw coordinate labels with sand color
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgb(cr, ColorScheme::SAND_R,
+                             ColorScheme::SAND_G,
+                             ColorScheme::SAND_B);
+
+    // Column labels (1-10)
+    for (int col = 0; col < BOARD_SIZE; col++) {
+        char label[3];
+        snprintf(label, sizeof(label), "%d", col + 1);
+        double x = BOARD_MARGIN + col * CELL_SIZE + CELL_SIZE / 2 - 5;
+        cairo_move_to(cr, x, BOARD_MARGIN - 5);
+        cairo_show_text(cr, label);
+    }
+
+    // Row labels (A-J)
+    for (int row = 0; row < BOARD_SIZE; row++) {
+        char label[2] = {(char)('A' + row), '\0'};
+        double y = BOARD_MARGIN + row * CELL_SIZE + CELL_SIZE / 2 + 5;
+        cairo_move_to(cr, 5, y);
+        cairo_show_text(cr, label);
+    }
+}
+
+void UIManager::drawCell(cairo_t* cr, int row, int col, CellState state, bool is_player_board) {
+    double x = BOARD_MARGIN + col * CELL_SIZE + CELL_PADDING;
+    double y = BOARD_MARGIN + row * CELL_SIZE + CELL_PADDING;
+    double size = CELL_SIZE - CELL_PADDING * 2;
+
+    // Base cell color - ocean water
+    cairo_set_source_rgba(cr, ColorScheme::OCEAN_DEEP_R,
+                             ColorScheme::OCEAN_DEEP_G,
+                             ColorScheme::OCEAN_DEEP_B, 0.3);
+    cairo_rectangle(cr, x, y, size, size);
+    cairo_fill(cr);
+
+    // Draw cell state
+    switch (state) {
+        case CELL_SHIP: {
+            if (is_player_board) {
+                // Draw battleship hull with 3D effect
+                // Ship hull (dark)
+                cairo_set_source_rgb(cr, ColorScheme::SHIP_DARK_R,
+                                       ColorScheme::SHIP_DARK_G,
+                                       ColorScheme::SHIP_DARK_B);
+                cairo_rectangle(cr, x + 4, y + 8, size - 8, size - 16);
+                cairo_fill(cr);
+
+                // Deck (gray)
+                cairo_set_source_rgb(cr, ColorScheme::SHIP_GRAY_R,
+                                       ColorScheme::SHIP_GRAY_G,
+                                       ColorScheme::SHIP_GRAY_B);
+                cairo_rectangle(cr, x + 4, y + 10, size - 8, size - 20);
+                cairo_fill(cr);
+
+                // Deck detail line
+                cairo_set_source_rgb(cr, ColorScheme::DECK_R,
+                                       ColorScheme::DECK_G,
+                                       ColorScheme::DECK_B);
+                cairo_rectangle(cr, x + 6, y + 12, size - 12, 3);
+                cairo_fill(cr);
+
+                // Turret/gun (small circle)
+                cairo_set_source_rgb(cr, ColorScheme::SHIP_DARK_R,
+                                       ColorScheme::SHIP_DARK_G,
+                                       ColorScheme::SHIP_DARK_B);
+                cairo_arc(cr, x + size/2, y + size/2, 4, 0, 2 * M_PI);
+                cairo_fill(cr);
+
+                // Highlight
+                cairo_set_source_rgba(cr, ColorScheme::WHITE_R,
+                                        ColorScheme::WHITE_G,
+                                        ColorScheme::WHITE_B, 0.3);
+                cairo_rectangle(cr, x + 5, y + 10, 2, size - 20);
+                cairo_fill(cr);
+            }
+            break;
+        }
+
+        case CELL_HIT: {
+            // Explosion effect with fire colors
+            cairo_pattern_t* explosion = cairo_pattern_create_radial(
+                x + size/2, y + size/2, 0,
+                x + size/2, y + size/2, size/2);
+            cairo_pattern_add_color_stop_rgb(explosion, 0,
+                ColorScheme::EXPLOSION_R, ColorScheme::EXPLOSION_G, ColorScheme::EXPLOSION_B);
+            cairo_pattern_add_color_stop_rgb(explosion, 0.5,
+                ColorScheme::HIT_R, ColorScheme::HIT_G, ColorScheme::HIT_B);
+            cairo_pattern_add_color_stop_rgba(explosion, 1,
+                ColorScheme::SHIP_DARK_R, ColorScheme::SHIP_DARK_G, ColorScheme::SHIP_DARK_B, 0.5);
+            cairo_set_source(cr, explosion);
+            cairo_arc(cr, x + size/2, y + size/2, size/2 - 2, 0, 2 * M_PI);
+            cairo_fill(cr);
+            cairo_pattern_destroy(explosion);
+
+            // Fire X mark
+            cairo_set_source_rgb(cr, ColorScheme::EXPLOSION_R,
+                                   ColorScheme::EXPLOSION_G,
+                                   ColorScheme::EXPLOSION_B);
+            cairo_set_line_width(cr, 3);
+            cairo_move_to(cr, x + 8, y + 8);
+            cairo_line_to(cr, x + size - 8, y + size - 8);
+            cairo_move_to(cr, x + size - 8, y + 8);
+            cairo_line_to(cr, x + 8, y + size - 8);
+            cairo_stroke(cr);
+            break;
+        }
+
+        case CELL_MISS: {
+            // Water splash effect
+            cairo_set_source_rgb(cr, ColorScheme::MISS_R,
+                                   ColorScheme::MISS_G,
+                                   ColorScheme::MISS_B);
+            cairo_arc(cr, x + size/2, y + size/2, 5, 0, 2 * M_PI);
+            cairo_fill(cr);
+
+            // Splash rings
+            for (int i = 1; i <= 2; i++) {
+                cairo_set_source_rgba(cr, ColorScheme::OCEAN_FOAM_R,
+                                         ColorScheme::OCEAN_FOAM_G,
+                                         ColorScheme::OCEAN_FOAM_B, 0.5 - i * 0.2);
+                cairo_arc(cr, x + size/2, y + size/2, 5 + i * 3, 0, 2 * M_PI);
+                cairo_set_line_width(cr, 1.5);
+                cairo_stroke(cr);
+            }
+            break;
+        }
+
+        case CELL_SUNK: {
+            // Sunk ship - draw dark ship wreck
+            // Dark background for sunk ship
+            cairo_set_source_rgb(cr, 0.1, 0.1, 0.15);
+            cairo_rectangle(cr, x + 2, y + 2, size - 4, size - 4);
+            cairo_fill(cr);
+
+            // Ship debris (dark gray ship)
+            cairo_set_source_rgb(cr, ColorScheme::SHIP_DARK_R * 0.5,
+                                   ColorScheme::SHIP_DARK_G * 0.5,
+                                   ColorScheme::SHIP_DARK_B * 0.5);
+            cairo_rectangle(cr, x + 6, y + 10, size - 12, size - 20);
+            cairo_fill(cr);
+
+            // Large black X to mark as sunk
+            cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+            cairo_set_line_width(cr, 4);
+            cairo_move_to(cr, x + 5, y + 5);
+            cairo_line_to(cr, x + size - 5, y + size - 5);
+            cairo_move_to(cr, x + size - 5, y + 5);
+            cairo_line_to(cr, x + 5, y + size - 5);
+            cairo_stroke(cr);
+
+            // Red outline to emphasize
+            cairo_set_source_rgba(cr, ColorScheme::HIT_R,
+                                    ColorScheme::HIT_G,
+                                    ColorScheme::HIT_B, 0.8);
+            cairo_set_line_width(cr, 2);
+            cairo_rectangle(cr, x + 1, y + 1, size - 2, size - 2);
+            cairo_stroke(cr);
+            break;
+        }
+
+        case CELL_EMPTY:
+        default:
+            break;
+    }
+}
+
+void UIManager::drawGlowEffect(cairo_t* cr, double x, double y, double radius) {
+    // Subtle ocean glow
+    cairo_set_source_rgba(cr, ColorScheme::OCEAN_FOAM_R,
+                             ColorScheme::OCEAN_FOAM_G,
+                             ColorScheme::OCEAN_FOAM_B, 0.3);
+    cairo_arc(cr, x, y, radius, 0, 2 * M_PI);
+    cairo_fill(cr);
+}
+
+void UIManager::drawWaveBackground(cairo_t* cr, int width, int height) {
+    // Ocean gradient background
+    cairo_pattern_t* grad = cairo_pattern_create_linear(0, 0, 0, height);
+    cairo_pattern_add_color_stop_rgb(grad, 0, ColorScheme::OCEAN_LIGHT_R, ColorScheme::OCEAN_LIGHT_G, ColorScheme::OCEAN_LIGHT_B);
+    cairo_pattern_add_color_stop_rgb(grad, 0.5, ColorScheme::OCEAN_DEEP_R, ColorScheme::OCEAN_DEEP_G, ColorScheme::OCEAN_DEEP_B);
+    cairo_pattern_add_color_stop_rgb(grad, 1, ColorScheme::NAVY_R, ColorScheme::NAVY_G, ColorScheme::NAVY_B);
+    cairo_rectangle(cr, 0, 0, width, height);
+    cairo_set_source(cr, grad);
+    cairo_fill(cr);
+    cairo_pattern_destroy(grad);
+
+    // Subtle wave lines
+    cairo_set_line_width(cr, 1.0);
+    for (int i = 0; i < 5; i++) {
+        double y = (i * height / 5.0);
+        cairo_set_source_rgba(cr, ColorScheme::OCEAN_FOAM_R, ColorScheme::OCEAN_FOAM_G, ColorScheme::OCEAN_FOAM_B, 0.1);
+
+        cairo_move_to(cr, 0, y);
+        for (int x = 0; x <= width; x += 10) {
+            double wave_y = y + 5 * sin((x + wave_offset * 0.5) * 0.05);
+            cairo_line_to(cr, x, wave_y);
+        }
+        cairo_stroke(cr);
+    }
+}
+
+gboolean UIManager::animationCallback(gpointer data) {
+    UIManager* ui = static_cast<UIManager*>(data);
+    ui->updateAnimations();
+    return TRUE;
+}
+
+void UIManager::updateAnimations() {
+    // Slow wave animation
+    glow_pulse += 0.05;
+    wave_offset += 1.0;
+
+    if (glow_pulse > 2 * M_PI) glow_pulse = 0.0;
+    if (wave_offset > 1000.0) wave_offset = 0.0;
+
+    // Redraw boards for wave animation
+    if (player_board_area) {
+        gtk_widget_queue_draw(player_board_area);
+    }
+    if (opponent_board_area) {
+        gtk_widget_queue_draw(opponent_board_area);
+    }
+}
+
+void UIManager::run() {
+    gtk_main();
+}
+
+void UIManager::quit() {
+    gtk_main_quit();
+}
+
+// Simple helper - just adds keybind hint (drag not needed with Alt+drag in Linux)
+void UIManager::makeDraggable(GtkWidget* widget, GtkWidget* /*window*/) {
+    // In Linux, Alt+Drag works by default to move windows
+    // We just add visual hint that header is the title bar
+    gtk_widget_set_tooltip_text(widget, "Use Alt+Drag to move window");
+}
+
+// GTK Callbacks
+gboolean on_board_draw(GtkWidget* widget, cairo_t* cr, gpointer data) {
+    UIManager* ui = static_cast<UIManager*>(data);
+
+    if (widget == ui->player_board_area) {
+        ui->renderPlayerBoard(cr);
+    } else if (widget == ui->opponent_board_area) {
+        ui->renderOpponentBoard(cr);
+    }
+
+    return FALSE;
+}
+
+gboolean on_board_button_press(GtkWidget* widget, GdkEventButton* event, gpointer data) {
+    UIManager* ui = static_cast<UIManager*>(data);
+
+    if (event->button == 1) { // Left click
+        int col = (event->x - BOARD_MARGIN) / CELL_SIZE;
+        int row = (event->y - BOARD_MARGIN) / CELL_SIZE;
+
+        if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
+            // Ship placement mode: click on player board to place ships
+            if (widget == ui->player_board_area && ui->ready_battle_button != nullptr) {
+                ui->placeShipAt(row, col);
+            }
+            // Game mode: click on opponent board to fire
+            else if (widget == ui->opponent_board_area && ui->opponent_board) {
+                // Check if it's player's turn
+                if (!ui->is_player_turn) {
+                    std::cout << "⏸ Not your turn! Wait for opponent..." << std::endl;
+                    return TRUE;
+                }
+
+                Coordinate target;
+                target.row = row;
+                target.col = col;
+
+                // Check if already shot at this cell
+                CellState cell = ui->opponent_board->getCell(row, col);
+                if (cell == CELL_EMPTY || cell == CELL_SHIP) {
+                    // Process the shot
+                    ShotResult result = ui->opponent_board->processShot(target);
+
+                    // Update stats
+                    ui->shots_fired++;
+
+                    // Log the result and update stats
+                    if (result == SHOT_HIT) {
+                        ui->hits_count++;
+                        std::cout << "💥 HIT at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
+                        // Continue turn on hit
+                    } else if (result == SHOT_SUNK) {
+                        ui->hits_count++;
+                        // Find which ship was sunk
+                        const Ship* ships = ui->opponent_board->getShips();
+                        ShipType sunk_ship = SHIP_CARRIER;
+                        for (int i = 0; i < NUM_SHIPS; i++) {
+                            if (ships[i].is_sunk) {
+                                // Check if this is the newly sunk ship
+                                for (int j = 0; j < ships[i].length; j++) {
+                                    int sr = ships[i].position.row + (ships[i].orientation == VERTICAL ? j : 0);
+                                    int sc = ships[i].position.col + (ships[i].orientation == HORIZONTAL ? j : 0);
+                                    if (sr == row && sc == col) {
+                                        sunk_ship = (ShipType)ships[i].type;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        ui->markSunkShip(row, col, sunk_ship);
+                        // Continue turn on sunk
+                    } else {
+                        std::cout << "💦 MISS at " << (char)('A' + row) << (col + 1) << std::endl;
+                        // Switch turn on miss
+                        ui->switchTurn();
+
+                        // If in bot mode and now bot's turn, trigger bot AI after 1 second
+                        if (ui->is_bot_mode && !ui->is_player_turn) {
+                            g_timeout_add(1000, UIManager::botTurnCallback, ui);
+                        }
+                    }
+
+                    // Update stats display
+                    ui->updateGameStats();
+
+                    // Redraw opponent board
+                    gtk_widget_queue_draw(widget);
+
+                    // Check if all ships sunk
+                    if (ui->opponent_board->allShipsSunk()) {
+                        ui->showNotification("VICTORY! All enemy ships destroyed!");
+                    }
+                } else {
+                    std::cout << "Already shot at " << (char)('A' + row) << (col + 1) << std::endl;
+                }
+            }
+            // Fallback: use callback
+            else if (ui->on_cell_clicked) {
+                ui->on_cell_clicked(row, col);
+            }
+        }
+    }
+
+    return TRUE;
+}
+
+gboolean on_board_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer data) {
+    UIManager* ui = static_cast<UIManager*>(data);
+
+    // Update hover position for ship placement preview
+    if (widget == ui->player_board_area && ui->ready_battle_button) {
+        int col = (event->x - BOARD_MARGIN) / CELL_SIZE;
+        int row = (event->y - BOARD_MARGIN) / CELL_SIZE;
+
+        if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
+            if (ui->hover_row != row || ui->hover_col != col) {
+                ui->hover_row = row;
+                ui->hover_col = col;
+                gtk_widget_queue_draw(widget);
+            }
+        } else {
+            if (ui->hover_row != -1 || ui->hover_col != -1) {
+                ui->hover_row = -1;
+                ui->hover_col = -1;
+                gtk_widget_queue_draw(widget);
+            }
+        }
+    }
+
+    return TRUE;
+}
+
+void on_fire_clicked(GtkButton* /*button*/, gpointer /*data*/) {
+    // Fire button clicked - will be handled by game logic
+    std::cout << "🔥 Fire button clicked!" << std::endl;
+}
+
+void on_resign_clicked(GtkButton* /*button*/, gpointer data) {
+    UIManager* ui = static_cast<UIManager*>(data);
+    if (ui->on_resign) {
+        ui->on_resign();
+    }
+}
+
+void on_draw_offer_clicked(GtkButton* /*button*/, gpointer data) {
+    UIManager* ui = static_cast<UIManager*>(data);
+    if (ui->on_draw_offer) {
+        ui->on_draw_offer();
+    }
+}
+
+void on_pause_clicked(GtkButton* /*button*/, gpointer /*data*/) {
+    std::cout << "Pause requested" << std::endl;
+}
+
+// Main Menu Screen
+GtkWidget* UIManager::createMainMenuScreen() {
+    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+
+    // Custom header with minimize and close buttons
+    GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_size_request(header, -1, 40);
+    GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
+    gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
+
+    GtkWidget* logo = gtk_label_new("◆");
+    gtk_widget_set_name(logo, "logo");
+    GtkWidget* header_title = gtk_label_new("BATTLESHIP ONLINE");
+    GtkStyleContext* header_title_ctx = gtk_widget_get_style_context(header_title);
+    gtk_style_context_add_class(header_title_ctx, "glow-text");
+
+    GtkWidget* spacer = gtk_label_new("");
+    gtk_widget_set_hexpand(spacer, TRUE);
+
+    // Minimize button
+    GtkWidget* minimize_btn = gtk_button_new_with_label("_");
+    gtk_widget_set_size_request(minimize_btn, 40, 40);
+    g_signal_connect(minimize_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        gtk_window_iconify(GTK_WINDOW(ui->main_window));
+    }), this);
+
+    // Close button
+    GtkWidget* close_btn = gtk_button_new_with_label("X");
+    gtk_widget_set_size_request(close_btn, 40, 40);
+    g_signal_connect(close_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer) {
+        gtk_main_quit();
+    }), nullptr);
+
+    gtk_box_pack_start(GTK_BOX(header), logo, FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(header), header_title, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(header), spacer, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(header), minimize_btn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(header), close_btn, FALSE, FALSE, 0);
+
+    // Center content
+    GtkWidget* content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 40);
+    gtk_widget_set_halign(content, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(content, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(content, 100);
+    gtk_widget_set_margin_bottom(content, 100);
+
+    // Title
+    GtkWidget* title = gtk_label_new("◆ BATTLESHIP ◆");
+    GtkStyleContext* title_context = gtk_widget_get_style_context(title);
+    gtk_style_context_add_class(title_context, "title");
+
+    GtkWidget* subtitle = gtk_label_new("Naval Warfare Strategy Game");
+    GtkStyleContext* subtitle_context = gtk_widget_get_style_context(subtitle);
+    gtk_style_context_add_class(subtitle_context, "glow-text");
+
+    // Buttons
+    GtkWidget* btn_vs_bot = gtk_button_new_with_label("» PLAY VS BOT «");
+    gtk_widget_set_size_request(btn_vs_bot, 400, 80);
+    g_signal_connect(btn_vs_bot, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->is_bot_mode = true;
+        // Reset boards and stats
+        ui->shots_fired = 0;
+        ui->hits_count = 0;
+        ui->is_player_turn = true;
+        if (ui->player_board) ui->player_board->clearBoard();
+        if (ui->opponent_board) ui->opponent_board->randomPlacement();
+        ui->showScreen(SCREEN_SHIP_PLACEMENT);
+    }), this);
+
+    GtkWidget* btn_play_online = gtk_button_new_with_label("» PLAY ONLINE «");
+    gtk_widget_set_size_request(btn_play_online, 400, 80);
+    g_signal_connect(btn_play_online, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->is_bot_mode = false;
+        ui->showScreen(SCREEN_LOGIN);
+    }), this);
+
+    GtkWidget* btn_exit = gtk_button_new_with_label("EXIT");
+    gtk_widget_set_size_request(btn_exit, 400, 50);
+    GtkStyleContext* exit_context = gtk_widget_get_style_context(btn_exit);
+    gtk_style_context_add_class(exit_context, "secondary");
+    g_signal_connect(btn_exit, "clicked", G_CALLBACK(+[](GtkButton*, gpointer) {
+        gtk_main_quit();
+    }), nullptr);
+
+    gtk_box_pack_start(GTK_BOX(content), title, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content), subtitle, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content), btn_vs_bot, FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(content), btn_play_online, FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(content), btn_exit, FALSE, FALSE, 10);
+
+    // Footer
+    GtkWidget* footer = gtk_label_new("Version 1.0 | Use Alt+Drag to move window");
+    gtk_widget_set_margin_bottom(footer, 20);
+
+    gtk_box_pack_start(GTK_BOX(main_box), header, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), content, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), footer, FALSE, FALSE, 0);
+
+    return main_box;
+}
+
+// Placeholder implementations for other screens
+GtkWidget* UIManager::createLoginScreen() {
+    // Main container
+    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+
+    // Custom header bar with drag support
+    GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_size_request(header, -1, 50);
+    GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0}; // Navy
+    gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
+
+    // Make header draggable to move window
+    makeDraggable(header, main_window);
+
+    // Logo and title in header
+    GtkWidget* header_title_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_margin_start(header_title_box, 20);
+    GtkWidget* logo = gtk_label_new("◆");  // Simple diamond instead of emoji
+    GtkWidget* header_title = gtk_label_new("BATTLESHIP ONLINE");
+    GtkStyleContext* header_context = gtk_widget_get_style_context(header_title);
+    gtk_style_context_add_class(header_context, "glow-text");
+    gtk_box_pack_start(GTK_BOX(header_title_box), logo, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(header_title_box), header_title, FALSE, FALSE, 0);
+
+    // Minimize button
+    GtkWidget* minimize_btn = gtk_button_new_with_label("_");
+    gtk_widget_set_size_request(minimize_btn, 50, 50);
+    GtkStyleContext* min_context = gtk_widget_get_style_context(minimize_btn);
+    gtk_style_context_add_class(min_context, "secondary");
+    g_signal_connect(minimize_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        GtkWidget* window = GTK_WIDGET(data);
+        gtk_window_iconify(GTK_WINDOW(window));
+    }), main_window);
+
+    // Close button
+    GtkWidget* close_btn = gtk_button_new_with_label("X");
+    gtk_widget_set_size_request(close_btn, 50, 50);
+    GtkStyleContext* close_context = gtk_widget_get_style_context(close_btn);
+    gtk_style_context_add_class(close_context, "danger");
+    g_signal_connect(close_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->quit();
+    }), this);
+
+    gtk_box_pack_start(GTK_BOX(header), header_title_box, TRUE, TRUE, 0);
+    gtk_box_pack_end(GTK_BOX(header), close_btn, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(header), minimize_btn, FALSE, FALSE, 0);
+
+    // Content area
+    GtkWidget* content_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 25);
+    gtk_widget_set_halign(content_box, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(content_box, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(content_box, 50);
+    gtk_widget_set_margin_bottom(content_box, 50);
+
+    // Title
+    GtkWidget* title = gtk_label_new("◆ WELCOME ADMIRAL ◆");
+    GtkStyleContext* title_context = gtk_widget_get_style_context(title);
+    gtk_style_context_add_class(title_context, "title");
+
+    GtkWidget* subtitle = gtk_label_new("Prepare for Naval Combat");
+    GtkStyleContext* subtitle_context = gtk_widget_get_style_context(subtitle);
+    gtk_style_context_add_class(subtitle_context, "glow-text");
+
+    // Input fields
+    GtkWidget* username_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(username_entry), "Username");
+    gtk_widget_set_size_request(username_entry, 400, 50);
+
+    GtkWidget* password_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(password_entry), "Password");
+    gtk_entry_set_visibility(GTK_ENTRY(password_entry), FALSE);
+    gtk_widget_set_size_request(password_entry, 400, 50);
+
+    // Buttons
+    GtkWidget* login_btn = gtk_button_new_with_label("» ENTER BATTLE «");
+    gtk_widget_set_size_request(login_btn, 400, 60);
+
+    GtkWidget* register_btn = gtk_button_new_with_label("ENLIST NOW");
+    gtk_widget_set_size_request(register_btn, 400, 45);
+    GtkStyleContext* reg_context = gtk_widget_get_style_context(register_btn);
+    gtk_style_context_add_class(reg_context, "secondary");
+
+    // Footer info
+    GtkWidget* footer = gtk_label_new("Version 1.0 | Multiplayer Naval Warfare");
+
+    gtk_box_pack_start(GTK_BOX(content_box), title, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), subtitle, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), username_entry, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), password_entry, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), login_btn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), register_btn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), footer, FALSE, FALSE, 0);
+
+    // Connect signals
+    g_signal_connect(login_btn, "clicked",
+                    G_CALLBACK(+[](GtkButton*, gpointer data) {
+                        UIManager* ui = static_cast<UIManager*>(data);
+                        ui->showScreen(SCREEN_LOBBY);
+                    }), this);
+
+    g_signal_connect(register_btn, "clicked",
+                    G_CALLBACK(+[](GtkButton*, gpointer data) {
+                        UIManager* ui = static_cast<UIManager*>(data);
+                        ui->showScreen(SCREEN_REGISTER);
+                    }), this);
+
+    gtk_box_pack_start(GTK_BOX(main_box), header, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), content_box, TRUE, TRUE, 0);
+
+    return main_box;
+}
+
+GtkWidget* UIManager::createRegisterScreen() {
+    // Similar to login but with confirm password
+    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+
+    // Header with close button
+    GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_size_request(header, -1, 50);
+    GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
+    gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
+
+    GtkWidget* header_title = gtk_label_new("⚓ ENLIST - CREATE ACCOUNT");
+    gtk_widget_set_margin_start(header_title, 20);
+    GtkStyleContext* header_context = gtk_widget_get_style_context(header_title);
+    gtk_style_context_add_class(header_context, "glow-text");
+
+    GtkWidget* back_btn = gtk_button_new_with_label("← BACK");
+    gtk_widget_set_size_request(back_btn, 100, 50);
+    GtkStyleContext* back_context = gtk_widget_get_style_context(back_btn);
+    gtk_style_context_add_class(back_context, "secondary");
+    g_signal_connect(back_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->showScreen(SCREEN_LOGIN);
+    }), this);
+
+    gtk_box_pack_start(GTK_BOX(header), header_title, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(header), back_btn, FALSE, FALSE, 0);
+
+    // Content
+    GtkWidget* content_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
+    gtk_widget_set_halign(content_box, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(content_box, GTK_ALIGN_CENTER);
+
+    GtkWidget* username = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(username), "Username (min 3 characters)");
+    gtk_widget_set_size_request(username, 400, 50);
+
+    GtkWidget* password = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(password), "Password (min 6 characters)");
+    gtk_entry_set_visibility(GTK_ENTRY(password), FALSE);
+    gtk_widget_set_size_request(password, 400, 50);
+
+    GtkWidget* confirm = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(confirm), "Confirm Password");
+    gtk_entry_set_visibility(GTK_ENTRY(confirm), FALSE);
+    gtk_widget_set_size_request(confirm, 400, 50);
+
+    GtkWidget* register_btn = gtk_button_new_with_label("🎖️ CREATE ACCOUNT");
+    gtk_widget_set_size_request(register_btn, 400, 60);
+    g_signal_connect(register_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->showScreen(SCREEN_LOGIN);
+    }), this);
+
+    gtk_box_pack_start(GTK_BOX(content_box), username, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), password, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), confirm, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), register_btn, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(main_box), header, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), content_box, TRUE, TRUE, 0);
+
+    return main_box;
+}
+
+GtkWidget* UIManager::createLobbyScreen() {
+    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+
+    // Header
+    GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    gtk_widget_set_size_request(header, -1, 60);
+    GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
+    gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
+    gtk_widget_set_margin_start(header, 20);
+    gtk_widget_set_margin_end(header, 20);
+
+    GtkWidget* title = gtk_label_new("⚓ NAVAL COMMAND CENTER");
+    GtkStyleContext* title_context = gtk_widget_get_style_context(title);
+    gtk_style_context_add_class(title_context, "title");
+
+    GtkWidget* user_info = gtk_label_new("Admiral_001 | ⭐ ELO: 1200");
+    GtkStyleContext* user_context = gtk_widget_get_style_context(user_info);
+    gtk_style_context_add_class(user_context, "glow-text");
+
+    GtkWidget* logout_btn = gtk_button_new_with_label("🚪 LOGOUT");
+    gtk_widget_set_size_request(logout_btn, 120, 40);
+    GtkStyleContext* logout_context = gtk_widget_get_style_context(logout_btn);
+    gtk_style_context_add_class(logout_context, "danger");
+    g_signal_connect(logout_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->showScreen(SCREEN_LOGIN);
+    }), this);
+
+    gtk_box_pack_start(GTK_BOX(header), title, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(header), logout_btn, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(header), user_info, FALSE, FALSE, 0);
+
+    // Content area
+    GtkWidget* content = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    gtk_widget_set_margin_start(content, 20);
+    gtk_widget_set_margin_end(content, 20);
+    gtk_widget_set_margin_top(content, 20);
+    gtk_widget_set_margin_bottom(content, 20);
+
+    // Left panel - Online players
+    GtkWidget* left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_set_size_request(left_panel, 500, -1);
+
+    GtkWidget* players_label = gtk_label_new("🌐 ONLINE ADMIRALS");
+    GtkStyleContext* players_context = gtk_widget_get_style_context(players_label);
+    gtk_style_context_add_class(players_context, "glow-text");
+
+    GtkWidget* players_scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(players_scroll),
+                                   GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_size_request(players_scroll, -1, 600);
+
+    GtkWidget* players_list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+
+    // Sample players
+    for (int i = 1; i <= 10; i++) {
+        GtkWidget* player_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+        gtk_widget_set_margin_start(player_row, 10);
+        gtk_widget_set_margin_end(player_row, 10);
+        gtk_widget_set_margin_top(player_row, 5);
+        gtk_widget_set_margin_bottom(player_row, 5);
+
+        char player_info[128];
+        snprintf(player_info, sizeof(player_info),
+                 "👤 Admiral_%03d | ⭐ %d | 🏆 %d%%",
+                 100 + i, 1100 + i * 50, 50 + i * 3);
+        GtkWidget* info_label = gtk_label_new(player_info);
+
+        GtkWidget* challenge_btn = gtk_button_new_with_label("⚔️ CHALLENGE");
+        gtk_widget_set_size_request(challenge_btn, 150, 35);
+        g_signal_connect(challenge_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+            UIManager* ui = static_cast<UIManager*>(data);
+            ui->showScreen(SCREEN_SHIP_PLACEMENT);
+        }), this);
+
+        gtk_box_pack_start(GTK_BOX(player_row), info_label, TRUE, TRUE, 0);
+        gtk_box_pack_end(GTK_BOX(player_row), challenge_btn, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(players_list), player_row, FALSE, FALSE, 0);
+    }
+
+    gtk_container_add(GTK_CONTAINER(players_scroll), players_list);
+    gtk_box_pack_start(GTK_BOX(left_panel), players_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(left_panel), players_scroll, TRUE, TRUE, 0);
+
+    // Right panel - Leaderboard
+    GtkWidget* right_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+
+    GtkWidget* leaderboard_label = gtk_label_new("🏆 TOP ADMIRALS");
+    GtkStyleContext* leaderboard_context = gtk_widget_get_style_context(leaderboard_label);
+    gtk_style_context_add_class(leaderboard_context, "glow-text");
+
+    GtkWidget* leaderboard_scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(leaderboard_scroll),
+                                   GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+
+    GtkWidget* leaderboard_list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+
+    for (int i = 1; i <= 20; i++) {
+        char rank_info[128];
+        const char* medal = i == 1 ? "🥇" : i == 2 ? "🥈" : i == 3 ? "🥉" : "🎖️";
+        snprintf(rank_info, sizeof(rank_info),
+                 "%s #%d - Admiral_%03d - ELO: %d",
+                 medal, i, i, 2000 - i * 50);
+        GtkWidget* rank_label = gtk_label_new(rank_info);
+        gtk_widget_set_margin_start(rank_label, 10);
+        gtk_widget_set_margin_top(rank_label, 3);
+        gtk_widget_set_margin_bottom(rank_label, 3);
+        gtk_box_pack_start(GTK_BOX(leaderboard_list), rank_label, FALSE, FALSE, 0);
+    }
+
+    gtk_container_add(GTK_CONTAINER(leaderboard_scroll), leaderboard_list);
+    gtk_box_pack_start(GTK_BOX(right_panel), leaderboard_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(right_panel), leaderboard_scroll, TRUE, TRUE, 0);
+
+    gtk_box_pack_start(GTK_BOX(content), left_panel, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(content), right_panel, TRUE, TRUE, 0);
+
+    gtk_box_pack_start(GTK_BOX(main_box), header, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), content, TRUE, TRUE, 0);
+
+    return main_box;
+}
+
+GtkWidget* UIManager::createShipPlacementScreen() {
+    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+
+    // Header
+    GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    gtk_widget_set_size_request(header, -1, 60);
+    GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
+    gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
+    gtk_widget_set_margin_start(header, 20);
+    gtk_widget_set_margin_end(header, 20);
+
+    GtkWidget* title = gtk_label_new("DEPLOY YOUR FLEET");
+    GtkStyleContext* title_context = gtk_widget_get_style_context(title);
+    gtk_style_context_add_class(title_context, "title");
+
+    GtkWidget* instruction = gtk_label_new("Position your ships strategically");
+    GtkStyleContext* inst_context = gtk_widget_get_style_context(instruction);
+    gtk_style_context_add_class(inst_context, "glow-text");
+
+    gtk_box_pack_start(GTK_BOX(header), title, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(header), instruction, FALSE, FALSE, 0);
+
+    // Content
+    GtkWidget* content = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 30);
+    gtk_widget_set_halign(content, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(content, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_start(content, 50);
+    gtk_widget_set_margin_end(content, 50);
+
+    // Left - Board
+    GtkWidget* left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+
+    GtkWidget* board_label = gtk_label_new("YOUR WATERS");
+    GtkStyleContext* board_context = gtk_widget_get_style_context(board_label);
+    gtk_style_context_add_class(board_context, "glow-text");
+
+    player_board_area = gtk_drawing_area_new();
+    gtk_widget_set_size_request(player_board_area, 480, 480);
+    gtk_widget_add_events(player_board_area, GDK_BUTTON_PRESS_MASK | GDK_POINTER_MOTION_MASK);
+    g_signal_connect(player_board_area, "draw", G_CALLBACK(on_board_draw), this);
+    g_signal_connect(player_board_area, "button-press-event", G_CALLBACK(on_board_button_press), this);
+    g_signal_connect(player_board_area, "motion-notify-event", G_CALLBACK(on_board_motion_notify), this);
+
+    gtk_box_pack_start(GTK_BOX(left_panel), board_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(left_panel), player_board_area, FALSE, FALSE, 0);
+
+    // Right - Ship selection
+    GtkWidget* right_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 15);
+    gtk_widget_set_size_request(right_panel, 350, -1);
+
+    GtkWidget* ships_label = gtk_label_new("AVAILABLE SHIPS");
+    GtkStyleContext* ships_context = gtk_widget_get_style_context(ships_label);
+    gtk_style_context_add_class(ships_context, "glow-text");
+
+    // Ship list
+    const char* ships[] = {
+        "Aircraft Carrier (5 cells)",
+        "Battleship (4 cells)",
+        "Cruiser (3 cells)",
+        "Submarine (3 cells)",
+        "Destroyer (2 cells)"
+    };
+
+    GtkWidget* ships_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    for (int i = 0; i < 5; i++) {
+        GtkWidget* ship_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+
+        // Create clickable button for ship selection
+        GtkWidget* ship_button = gtk_button_new_with_label(ships[i]);
+        gtk_widget_set_size_request(ship_button, 250, 35);
+
+        // Store the ship type in button data
+        g_object_set_data(G_OBJECT(ship_button), "ship_type", GINT_TO_POINTER(i));
+        g_signal_connect(ship_button, "clicked", G_CALLBACK(+[](GtkButton* btn, gpointer data) {
+            UIManager* ui = static_cast<UIManager*>(data);
+            int ship_type = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "ship_type"));
+            ui->selectShipForPlacement((ShipType)ship_type);
+        }), this);
+
+        GtkWidget* placed_label = gtk_label_new("❌");
+        ship_status_labels[i] = placed_label;  // Store reference
+
+        gtk_box_pack_start(GTK_BOX(ship_row), ship_button, TRUE, TRUE, 0);
+        gtk_box_pack_end(GTK_BOX(ship_row), placed_label, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(ships_box), ship_row, FALSE, FALSE, 0);
+    }
+
+    // Controls
+    GtkWidget* controls_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_set_margin_top(controls_box, 20);
+
+    GtkWidget* rotate_btn = gtk_button_new_with_label("ROTATE SHIP");
+    gtk_widget_set_size_request(rotate_btn, -1, 50);
+    g_signal_connect(rotate_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->toggleShipOrientation();
+    }), this);
+
+    GtkWidget* random_btn = gtk_button_new_with_label("RANDOM PLACEMENT");
+    gtk_widget_set_size_request(random_btn, -1, 50);
+    GtkStyleContext* random_context = gtk_widget_get_style_context(random_btn);
+    gtk_style_context_add_class(random_context, "secondary");
+    g_signal_connect(random_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->randomPlaceAllShips();
+    }), this);
+
+    GtkWidget* ready_btn = gtk_button_new_with_label("READY FOR BATTLE!");
+    gtk_widget_set_size_request(ready_btn, -1, 60);
+    ready_battle_button = ready_btn;  // Store reference
+    gtk_widget_set_sensitive(ready_btn, FALSE);  // Disabled until all ships placed
+    g_signal_connect(ready_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        if (ui->allShipsPlaced()) {
+            ui->showScreen(SCREEN_GAME);
+        }
+    }), this);
+
+    GtkWidget* back_btn = gtk_button_new_with_label("← BACK TO LOBBY");
+    gtk_widget_set_size_request(back_btn, -1, 40);
+    GtkStyleContext* back_context = gtk_widget_get_style_context(back_btn);
+    gtk_style_context_add_class(back_context, "danger");
+    g_signal_connect(back_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->showScreen(SCREEN_LOBBY);
+    }), this);
+
+    gtk_box_pack_start(GTK_BOX(controls_box), rotate_btn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(controls_box), random_btn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(controls_box), ready_btn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(controls_box), back_btn, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(right_panel), ships_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(right_panel), ships_box, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(right_panel), controls_box, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(content), left_panel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content), right_panel, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(main_box), header, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), content, TRUE, TRUE, 0);
+
+    return main_box;
+}
+
+GtkWidget* UIManager::createReplayScreen() {
+    return gtk_label_new("Replay Screen - TODO");
+}
+
+GtkWidget* UIManager::createProfileScreen() {
+    return gtk_label_new("Profile Screen - TODO");
+}
+
+void UIManager::showErrorDialog(const std::string& message) {
+    GtkWidget* dialog = gtk_message_dialog_new(
+        GTK_WINDOW(main_window),
+        GTK_DIALOG_MODAL,
+        GTK_MESSAGE_ERROR,
+        GTK_BUTTONS_OK,
+        "%s", message.c_str()
+    );
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+}
+
+void UIManager::showNotification(const std::string& message) {
+    GtkWidget* dialog = gtk_message_dialog_new(
+        GTK_WINDOW(main_window),
+        GTK_DIALOG_MODAL,
+        GTK_MESSAGE_INFO,
+        GTK_BUTTONS_OK,
+        "%s", message.c_str()
+    );
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+}
+
+void UIManager::addChatMessage(const std::string& sender, const std::string& message, bool /*is_self*/) {
+    if (!chat_view) return;
+
+    GtkTextBuffer* buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(chat_view));
+    GtkTextIter end;
+    gtk_text_buffer_get_end_iter(buffer, &end);
+
+    std::string full_message = sender + ": " + message + "\n";
+    gtk_text_buffer_insert(buffer, &end, full_message.c_str(), -1);
+
+    // Auto-scroll to bottom
+    GtkTextMark* mark = gtk_text_buffer_get_insert(buffer);
+    gtk_text_view_scroll_to_mark(GTK_TEXT_VIEW(chat_view), mark, 0.0, TRUE, 0.0, 1.0);
+}
+
+void UIManager::updateTurnIndicator(bool is_player_turn) {
+    if (turn_indicator) {
+        gtk_label_set_text(GTK_LABEL(turn_indicator),
+                          is_player_turn ? "🎯 YOUR TURN" : "⏳ OPPONENT'S TURN");
+    }
+}
+
+void UIManager::updateTimer(int seconds_remaining) {
+    if (timer_label) {
+        char time_str[32];
+        snprintf(time_str, sizeof(time_str), "⏱️ %02d:%02d",
+                seconds_remaining / 60, seconds_remaining % 60);
+        gtk_label_set_text(GTK_LABEL(timer_label), time_str);
+    }
+}
+
+// Ship placement helper methods
+void UIManager::selectShipForPlacement(ShipType type) {
+    selected_ship_type = type;
+    std::cout << "Selected ship: " << shipTypeToName(type) << std::endl;
+}
+
+void UIManager::toggleShipOrientation() {
+    current_orientation = (current_orientation == HORIZONTAL) ? VERTICAL : HORIZONTAL;
+    std::cout << "Orientation: " << (current_orientation == HORIZONTAL ? "HORIZONTAL" : "VERTICAL") << std::endl;
+
+    // Redraw board to show preview with new orientation
+    if (player_board_area) {
+        gtk_widget_queue_draw(player_board_area);
+    }
+}
+
+void UIManager::placeShipAt(int row, int col) {
+    if (!player_board) return;
+
+    Coordinate pos;
+    pos.row = row;
+    pos.col = col;
+
+    // Try to place the ship
+    if (player_board->placeShip(selected_ship_type, pos, current_orientation)) {
+        ships_placed[selected_ship_type] = true;
+        std::cout << "✅ Placed " << shipTypeToName(selected_ship_type)
+                  << " at " << (char)('A' + row) << (col + 1) << std::endl;
+
+        updateShipStatusUI();
+
+        // Auto-select next unplaced ship
+        for (int i = 0; i < NUM_SHIPS; i++) {
+            if (!ships_placed[i]) {
+                selected_ship_type = (ShipType)i;
+                break;
+            }
+        }
+
+        // Redraw board
+        if (player_board_area) {
+            gtk_widget_queue_draw(player_board_area);
+        }
+    } else {
+        std::cout << "❌ Cannot place ship there!" << std::endl;
+    }
+}
+
+void UIManager::randomPlaceAllShips() {
+    if (!player_board) return;
+
+    std::cout << "🎲 Random placement..." << std::endl;
+    player_board->randomPlacement();
+
+    // Mark all ships as placed
+    for (int i = 0; i < NUM_SHIPS; i++) {
+        ships_placed[i] = true;
+    }
+
+    updateShipStatusUI();
+
+    // Redraw board
+    if (player_board_area) {
+        gtk_widget_queue_draw(player_board_area);
+    }
+}
+
+void UIManager::updateShipStatusUI() {
+    // Update ship status labels to show ✅ for placed ships
+    for (int i = 0; i < NUM_SHIPS; i++) {
+        if (ship_status_labels[i]) {
+            gtk_label_set_text(GTK_LABEL(ship_status_labels[i]),
+                              ships_placed[i] ? "✅" : "❌");
+        }
+    }
+
+    // Enable/disable ready button based on all ships placed
+    if (ready_battle_button) {
+        gtk_widget_set_sensitive(ready_battle_button, allShipsPlaced());
+    }
+}
+
+bool UIManager::allShipsPlaced() {
+    for (int i = 0; i < NUM_SHIPS; i++) {
+        if (!ships_placed[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void UIManager::clearAllShips() {
+    if (!player_board) return;
+
+    player_board->clearBoard();
+
+    for (int i = 0; i < NUM_SHIPS; i++) {
+        ships_placed[i] = false;
+    }
+
+    selected_ship_type = SHIP_CARRIER;
+    updateShipStatusUI();
+
+    // Redraw board
+    if (player_board_area) {
+        gtk_widget_queue_draw(player_board_area);
+    }
+
+    std::cout << "🧹 All ships cleared!" << std::endl;
+}
+
+// Game flow helper methods
+void UIManager::switchTurn() {
+    is_player_turn = !is_player_turn;
+
+    if (turn_indicator) {
+        if (is_player_turn) {
+            gtk_label_set_text(GTK_LABEL(turn_indicator), "» YOUR TURN «");
+        } else {
+            gtk_label_set_text(GTK_LABEL(turn_indicator), "« OPPONENT'S TURN »");
+        }
+    }
+
+    std::cout << (is_player_turn ? "» YOUR TURN" : "« OPPONENT'S TURN") << std::endl;
+}
+
+void UIManager::updateGameStats() {
+    if (shots_label_widget) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Shots\n%d", shots_fired);
+        gtk_label_set_text(GTK_LABEL(shots_label_widget), buf);
+    }
+
+    if (hits_label_widget) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Hits\n%d", hits_count);
+        gtk_label_set_text(GTK_LABEL(hits_label_widget), buf);
+    }
+
+    if (accuracy_label_widget && shots_fired > 0) {
+        char buf[32];
+        int accuracy = (hits_count * 100) / shots_fired;
+        snprintf(buf, sizeof(buf), "Accuracy\n%d%%", accuracy);
+        gtk_label_set_text(GTK_LABEL(accuracy_label_widget), buf);
+    }
+}
+
+void UIManager::markSunkShip(int /*row*/, int /*col*/, ShipType ship_type) {
+    if (!opponent_board) return;
+
+    // Find the ship that was sunk
+    const Ship* ships = opponent_board->getShips();
+    for (int i = 0; i < NUM_SHIPS; i++) {
+        if (ships[i].type == ship_type && ships[i].is_sunk) {
+            // Mark all cells of the sunk ship as SUNK for visual distinction
+            int length = ships[i].length;
+            for (int j = 0; j < length; j++) {
+                int r = ships[i].position.row + (ships[i].orientation == VERTICAL ? j : 0);
+                int c = ships[i].position.col + (ships[i].orientation == HORIZONTAL ? j : 0);
+
+                // Change from HIT to SUNK
+                opponent_board->setCell(r, c, CELL_SUNK);
+            }
+            break;
+        }
+    }
+
+    std::cout << "SUNK " << shipTypeToName(ship_type) << "!" << std::endl;
+}
+
+// Bot AI Implementation
+void UIManager::botTakeTurn() {
+    if (!player_board || is_player_turn || !is_bot_mode) return;
+
+    // Random shooting strategy
+    int row, col;
+    int attempts = 0;
+    bool valid_shot = false;
+
+    while (!valid_shot && attempts < 100) {
+        row = rand() % BOARD_SIZE;
+        col = rand() % BOARD_SIZE;
+
+        CellState cell = player_board->getCell(row, col);
+        if (cell == CELL_EMPTY || cell == CELL_SHIP) {
+            valid_shot = true;
+        }
+        attempts++;
+    }
+
+    if (!valid_shot) {
+        // No valid shots left, bot loses
+        std::cout << "Bot has no valid moves!" << std::endl;
+        switchTurn();
+        return;
+    }
+
+    // Process bot's shot
+    Coordinate target;
+    target.row = row;
+    target.col = col;
+    ShotResult result = player_board->processShot(target);
+
+    // Log result
+    if (result == SHOT_HIT) {
+        std::cout << "Bot HIT at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
+        // Bot continues turn on hit
+        g_timeout_add(1000, botTurnCallback, this);  // Shoot again after 1s
+    } else if (result == SHOT_SUNK) {
+        std::cout << "Bot SUNK your ship at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
+        // Bot continues turn on sunk
+        g_timeout_add(1000, botTurnCallback, this);  // Shoot again after 1s
+    } else {
+        std::cout << "Bot MISS at " << (char)('A' + row) << (col + 1) << std::endl;
+        switchTurn();  // Switch to player turn
+    }
+
+    // Redraw player board
+    if (player_board_area) {
+        gtk_widget_queue_draw(player_board_area);
+    }
+
+    // Check if player lost
+    if (player_board->allShipsSunk()) {
+        showNotification("DEFEAT! All your ships destroyed!");
+    }
+}
+
+gboolean UIManager::botTurnCallback(gpointer data) {
+    UIManager* ui = static_cast<UIManager*>(data);
+    ui->botTakeTurn();
+    return FALSE;  // Don't repeat
+}

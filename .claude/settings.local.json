@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make clean:*)",
+      "Bash(make client:*)",
+      "Bash(timeout 5 ./bin/battleship_client:*)",
+      "WebSearch",
+      "WebFetch(domain:opengameart.org)",
+      "Bash(timeout 8 ./bin/battleship_client:*)",
+      "Bash(timeout 10 ./bin/battleship_client:*)",
+      "Bash(ldd:*)",
+      "Bash(curl:*)",
+      "Bash(unzip:*)",
+      "Bash(python3:*)",
+      "Bash(for dir in Carrier Battleship Cruiser Destroyer Submarine)",
+      "Bash(do echo \"=== $dir ===\")",
+      "Bash(ls:*)",
+      "Bash(done)",
+      "Bash(awk:*)",
+      "Bash(gdb:*)",
+      "Bash(echo:*)",
+      "Bash(timeout 3 ldd:*)",
+      "Bash(/dev/null)",
+      "Bash(make run-client:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
