@@ -3,9 +3,9 @@
 #include <cmath>
 #include <iostream>
 
-#define CELL_SIZE 60
-#define CELL_PADDING 3
-#define BOARD_MARGIN 30
+#define CELL_SIZE 45
+#define CELL_PADDING 2
+#define BOARD_MARGIN 20
 
 // Board rendering implementation
 void UIManager::renderPlayerBoard(cairo_t* cr) {
@@ -78,48 +78,48 @@ void UIManager::renderOpponentBoard(cairo_t* cr) {
                     double size = CELL_SIZE - CELL_PADDING * 2;
 
                     if (anim->type == ANIM_EXPLOSION) {
-                        // Beautiful explosion effect - expanding fire burst
+                        // Subtle explosion effect
                         double scale = sin(anim->progress * M_PI); // 0 -> 1 -> 0
-                        double radius = scale * size * 0.6;
+                        double radius = scale * size * 0.45;
                         double cx = x + size/2;
                         double cy = y + size/2;
 
-                        // Outer orange glow
-                        cairo_pattern_t* glow = cairo_pattern_create_radial(cx, cy, 0, cx, cy, radius * 1.5);
-                        cairo_pattern_add_color_stop_rgba(glow, 0, 1.0, 0.65, 0.0, scale * 0.9);
-                        cairo_pattern_add_color_stop_rgba(glow, 0.5, 1.0, 0.3, 0.0, scale * 0.6);
-                        cairo_pattern_add_color_stop_rgba(glow, 1, 1.0, 0.0, 0.0, 0);
+                        // Outer orange glow (reduced intensity)
+                        cairo_pattern_t* glow = cairo_pattern_create_radial(cx, cy, 0, cx, cy, radius * 1.3);
+                        cairo_pattern_add_color_stop_rgba(glow, 0, 1.0, 0.5, 0.0, scale * 0.6);
+                        cairo_pattern_add_color_stop_rgba(glow, 0.5, 1.0, 0.3, 0.0, scale * 0.4);
+                        cairo_pattern_add_color_stop_rgba(glow, 1, 0.8, 0.0, 0.0, 0);
                         cairo_set_source(cr, glow);
-                        cairo_arc(cr, cx, cy, radius * 1.5, 0, 2 * M_PI);
+                        cairo_arc(cr, cx, cy, radius * 1.3, 0, 2 * M_PI);
                         cairo_fill(cr);
                         cairo_pattern_destroy(glow);
 
-                        // Inner bright flash
-                        cairo_pattern_t* flash = cairo_pattern_create_radial(cx, cy, 0, cx, cy, radius);
-                        cairo_pattern_add_color_stop_rgba(flash, 0, 1.0, 1.0, 0.9, scale);
-                        cairo_pattern_add_color_stop_rgba(flash, 0.5, 1.0, 0.8, 0.0, scale * 0.7);
-                        cairo_pattern_add_color_stop_rgba(flash, 1, 1.0, 0.3, 0.0, 0);
+                        // Inner flash (more subtle)
+                        cairo_pattern_t* flash = cairo_pattern_create_radial(cx, cy, 0, cx, cy, radius * 0.8);
+                        cairo_pattern_add_color_stop_rgba(flash, 0, 1.0, 0.9, 0.6, scale * 0.7);
+                        cairo_pattern_add_color_stop_rgba(flash, 0.5, 1.0, 0.6, 0.0, scale * 0.5);
+                        cairo_pattern_add_color_stop_rgba(flash, 1, 0.9, 0.2, 0.0, 0);
                         cairo_set_source(cr, flash);
-                        cairo_arc(cr, cx, cy, radius, 0, 2 * M_PI);
+                        cairo_arc(cr, cx, cy, radius * 0.8, 0, 2 * M_PI);
                         cairo_fill(cr);
                         cairo_pattern_destroy(flash);
 
                     } else if (anim->type == ANIM_SPLASH) {
-                        // Water splash - expanding blue rings
+                        // Subtle water splash - expanding blue rings
                         double cx = x + size/2;
                         double cy = y + size/2;
 
-                        for (int ring = 0; ring < 3; ring++) {
-                            double radius = (5 + anim->progress * 15) + ring * 5;
-                            double alpha = (1.0 - anim->progress) * (1.0 - ring * 0.3);
+                        for (int ring = 0; ring < 2; ring++) {
+                            double radius = (5 + anim->progress * 12) + ring * 4;
+                            double alpha = (1.0 - anim->progress) * (1.0 - ring * 0.4);
 
                             cairo_set_source_rgba(cr,
                                 ColorScheme::OCEAN_FOAM_R,
                                 ColorScheme::OCEAN_FOAM_G,
                                 ColorScheme::OCEAN_FOAM_B,
-                                alpha * 0.7);
+                                alpha * 0.5);
                             cairo_arc(cr, cx, cy, radius, 0, 2 * M_PI);
-                            cairo_set_line_width(cr, 2.5);
+                            cairo_set_line_width(cr, 2.0);
                             cairo_stroke(cr);
                         }
                     }

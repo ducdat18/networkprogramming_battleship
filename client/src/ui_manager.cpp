@@ -4,10 +4,10 @@
 #include <ctime>
 #include <iostream>
 
-#define CELL_SIZE 60
-#define CELL_PADDING 3
-#define BOARD_MARGIN 30
-#define GLOW_RADIUS 20
+#define CELL_SIZE 45
+#define CELL_PADDING 2
+#define BOARD_MARGIN 20
+#define GLOW_RADIUS 15
 
 UIManager::UIManager()
     : main_window(nullptr), current_screen(nullptr),
@@ -79,15 +79,15 @@ void UIManager::initialize(int argc, char* argv[]) {
         std::cerr << "⚠️ Warning: Some assets failed to load" << std::endl;
     }
 
-    // Create main window - borderless for modern look
+    // Create main window with decorations for resize/maximize
     main_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(main_window), "BATTLESHIP ONLINE");
-    gtk_window_set_default_size(GTK_WINDOW(main_window), 1400, 800);
+    gtk_window_set_default_size(GTK_WINDOW(main_window), 1200, 700);
     gtk_window_set_position(GTK_WINDOW(main_window), GTK_WIN_POS_CENTER);
-    gtk_window_set_resizable(GTK_WINDOW(main_window), FALSE);
+    gtk_window_set_resizable(GTK_WINDOW(main_window), TRUE);
 
-    // Remove window decorations (title bar) for custom look
-    gtk_window_set_decorated(GTK_WINDOW(main_window), FALSE);
+    // Keep window decorations for resize/maximize/fullscreen
+    gtk_window_set_decorated(GTK_WINDOW(main_window), TRUE);
 
     // Apply nautical maritime theme
     GtkCssProvider* css_provider = gtk_css_provider_new();
@@ -107,6 +107,12 @@ void UIManager::initialize(int argc, char* argv[]) {
         "button:hover {"
         "   background: linear-gradient(to bottom, #059FFD, #87CEEB);"
         "   border-color: #EEDEBA;"
+        "}"
+        "button:disabled {"
+        "   background: linear-gradient(to bottom, #555555, #333333);"
+        "   color: #888888;"
+        "   border-color: #444444;"
+        "   opacity: 0.6;"
         "}"
         "label {"
         "   color: #EEDEBA;"
@@ -161,12 +167,26 @@ void UIManager::initialize(int argc, char* argv[]) {
     gtk_widget_show_all(main_window);
     std::cout << "✅ Window shown successfully!" << std::endl;
 
+    // Ensure window gets focus and cursor is visible
+    gtk_window_present(GTK_WINDOW(main_window));
+
+    // Make sure cursor is visible on the window
+    GdkWindow* gdk_window = gtk_widget_get_window(main_window);
+    if (gdk_window) {
+        gdk_window_set_cursor(gdk_window, NULL);  // NULL = default cursor (visible)
+    }
+
     // Start animation timer AFTER window is fully shown
     g_idle_add(+[](gpointer data) -> gboolean {
         UIManager* ui = static_cast<UIManager*>(data);
         if (ui->animation_timer_id == 0) {
             std::cout << "⏱️ Starting animation timer (delayed)..." << std::endl;
             ui->animation_timer_id = g_timeout_add(100, animationCallback, ui);
+        }
+        // Ensure cursor visibility again after window is realized
+        GdkWindow* gdk_win = gtk_widget_get_window(ui->main_window);
+        if (gdk_win) {
+            gdk_window_set_cursor(gdk_win, NULL);
         }
         return FALSE;  // Don't repeat
     }, this);
@@ -210,6 +230,12 @@ void UIManager::showScreen(UIScreen screen) {
     if (current_screen) {
         gtk_container_add(GTK_CONTAINER(main_window), current_screen);
         gtk_widget_show_all(main_window);
+
+        // Ensure cursor is visible when switching screens
+        GdkWindow* gdk_window = gtk_widget_get_window(main_window);
+        if (gdk_window) {
+            gdk_window_set_cursor(gdk_window, NULL);
+        }
     }
 }
 
@@ -449,11 +475,11 @@ gboolean on_board_draw(GtkWidget* widget, cairo_t* cr, gpointer data) {
 gboolean on_board_button_press(GtkWidget* widget, GdkEventButton* event, gpointer data) {
     UIManager* ui = static_cast<UIManager*>(data);
 
-    if (event->button == 1) { // Left click
-        int col = (event->x - BOARD_MARGIN) / CELL_SIZE;
-        int row = (event->y - BOARD_MARGIN) / CELL_SIZE;
+    int col = (event->x - BOARD_MARGIN) / CELL_SIZE;
+    int row = (event->y - BOARD_MARGIN) / CELL_SIZE;
 
-        if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
+    if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
+        if (event->button == 1) { // Left click
             // Ship placement mode: click on player board to place ships
             if (widget == ui->player_board_area && ui->ready_battle_button != nullptr) {
                 ui->placeShipAt(row, col);
@@ -481,6 +507,7 @@ gboolean on_board_button_press(GtkWidget* widget, GdkEventButton* event, gpointe
                 ui->on_cell_clicked(row, col);
             }
         }
+        // Right-click removed - use delete buttons instead
     }
 
     return TRUE;
@@ -592,12 +619,16 @@ bool UIManager::executeFireAtTarget() {
     shots_fired++;
 
     // Add animation based on result
-    if (result == SHOT_HIT || result == SHOT_SUNK) {
+    if (result == SHOT_HIT) {
         hits_count++;
         if (animation_manager) {
             animation_manager->addExplosion(row, col);
         }
         std::cout << "💥 HIT at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
+    } else if (result == SHOT_SUNK) {
+        hits_count++;
+        // No explosion animation for sunk ships
+        std::cout << "🔥 SUNK at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
     } else {
         if (animation_manager) {
             animation_manager->addSplash(row, col);
@@ -617,9 +648,7 @@ bool UIManager::executeFireAtTarget() {
                     int sc = ships[i].position.col + (ships[i].orientation == HORIZONTAL ? j : 0);
                     if (sr == row && sc == col) {
                         markSunkShip(row, col, (ShipType)ships[i].type);
-                        if (animation_manager) {
-                            animation_manager->addShipSink(row, col);
-                        }
+                        // Removed ship sink animation
                         break;
                     }
                 }

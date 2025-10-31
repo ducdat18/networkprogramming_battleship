@@ -112,9 +112,13 @@ void UIManager::clearAllShips() {
     selected_ship_type = SHIP_CARRIER;
     updateShipStatusUI();
 
-    // Redraw board
-    if (player_board_area) {
+    // Force immediate redraw
+    if (player_board_area && GTK_IS_WIDGET(player_board_area)) {
         gtk_widget_queue_draw(player_board_area);
+        // Process pending events to force redraw immediately
+        while (gtk_events_pending()) {
+            gtk_main_iteration();
+        }
     }
 
     std::cout << "🧹 All ships cleared!" << std::endl;
@@ -132,9 +136,13 @@ void UIManager::clearShip(ShipType type) {
     // Update UI
     updateShipStatusUI();
 
-    // Redraw board
-    if (player_board_area) {
+    // Force immediate redraw
+    if (player_board_area && GTK_IS_WIDGET(player_board_area)) {
         gtk_widget_queue_draw(player_board_area);
+        // Process pending events to force redraw immediately
+        while (gtk_events_pending()) {
+            gtk_main_iteration();
+        }
     }
 
     std::cout << "🗑️ Cleared " << shipTypeToName(type) << std::endl;

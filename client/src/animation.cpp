@@ -10,18 +10,18 @@ AnimationManager::~AnimationManager() {
 }
 
 void AnimationManager::addExplosion(int row, int col) {
-    // Explosion lasts 1.5 seconds
-    active_animations.push_back(Animation(ANIM_EXPLOSION, row, col, 1.5));
+    // Explosion lasts 1.0 second (reduced from 1.5)
+    active_animations.push_back(Animation(ANIM_EXPLOSION, row, col, 1.0));
 }
 
 void AnimationManager::addSplash(int row, int col) {
-    // Splash lasts 1.0 second
-    active_animations.push_back(Animation(ANIM_SPLASH, row, col, 1.0));
+    // Splash lasts 0.8 seconds (reduced from 1.0)
+    active_animations.push_back(Animation(ANIM_SPLASH, row, col, 0.8));
 }
 
 void AnimationManager::addShipSink(int row, int col) {
-    // Ship sink lasts 2.0 seconds
-    active_animations.push_back(Animation(ANIM_SHIP_SINK, row, col, 2.0));
+    // Ship sink lasts 1.5 seconds (reduced from 2.0)
+    active_animations.push_back(Animation(ANIM_SHIP_SINK, row, col, 1.5));
 }
 
 void AnimationManager::update() {

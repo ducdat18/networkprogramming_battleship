@@ -1,9 +1,9 @@
 #include "ui_manager.h"
 #include <iostream>
 
-#define CELL_SIZE 60
-#define CELL_PADDING 3
-#define BOARD_MARGIN 30
+#define CELL_SIZE 45
+#define CELL_PADDING 2
+#define BOARD_MARGIN 20
 
 GtkWidget* UIManager::createGameScreen() {
     // Main container
@@ -43,9 +43,9 @@ GtkWidget* UIManager::createGameScreen() {
     gtk_box_pack_end(GTK_BOX(header), user_box, FALSE, FALSE, 0);
 
     // Game content
-    GtkWidget* content_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
-    gtk_widget_set_margin_start(content_box, 20);
-    gtk_widget_set_margin_end(content_box, 20);
+    GtkWidget* content_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    gtk_widget_set_margin_start(content_box, 15);
+    gtk_widget_set_margin_end(content_box, 15);
     gtk_box_set_homogeneous(GTK_BOX(content_box), FALSE);
 
     // Left panel - Player board
@@ -62,6 +62,14 @@ GtkWidget* UIManager::createGameScreen() {
                          GDK_BUTTON_PRESS_MASK | GDK_POINTER_MOTION_MASK);
     g_signal_connect(player_board_area, "draw", G_CALLBACK(on_board_draw), this);
 
+    // Ensure cursor is visible on board
+    g_signal_connect(player_board_area, "realize", G_CALLBACK(+[](GtkWidget* widget, gpointer) {
+        GdkWindow* window = gtk_widget_get_window(widget);
+        if (window) {
+            gdk_window_set_cursor(window, NULL);
+        }
+    }), NULL);
+
     GtkWidget* ships_status_label = gtk_label_new(
         "Aircraft Carrier [#####]\n"
         "Battleship [####]\n"
@@ -76,8 +84,8 @@ GtkWidget* UIManager::createGameScreen() {
     gtk_box_pack_start(GTK_BOX(left_panel), ships_status_label, FALSE, FALSE, 0);
 
     // Center panel - Match info
-    GtkWidget* center_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 15);
-    gtk_widget_set_size_request(center_panel, 400, -1);
+    GtkWidget* center_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_set_size_request(center_panel, 280, -1);
 
     // Timer
     timer_label = gtk_label_new("TIME: 00:45");
@@ -128,7 +136,7 @@ GtkWidget* UIManager::createGameScreen() {
     chat_view = gtk_text_view_new();
     gtk_text_view_set_editable(GTK_TEXT_VIEW(chat_view), FALSE);
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(chat_view), GTK_WRAP_WORD);
-    gtk_widget_set_size_request(chat_view, -1, 150);
+    gtk_widget_set_size_request(chat_view, -1, 100);
 
     GtkWidget* chat_scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(chat_scroll), chat_view);
@@ -170,6 +178,14 @@ GtkWidget* UIManager::createGameScreen() {
     g_signal_connect(opponent_board_area, "draw", G_CALLBACK(on_board_draw), this);
     g_signal_connect(opponent_board_area, "button-press-event",
                     G_CALLBACK(on_board_button_press), this);
+
+    // Ensure cursor is visible on board
+    g_signal_connect(opponent_board_area, "realize", G_CALLBACK(+[](GtkWidget* widget, gpointer) {
+        GdkWindow* window = gtk_widget_get_window(widget);
+        if (window) {
+            gdk_window_set_cursor(window, NULL);
+        }
+    }), NULL);
 
     GtkWidget* opponent_info_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     GtkWidget* opponent_name = gtk_label_new("Opponent_999");
@@ -627,32 +643,44 @@ GtkWidget* UIManager::createShipPlacementScreen() {
     gtk_box_pack_end(GTK_BOX(header), instruction, FALSE, FALSE, 0);
 
     // Content
-    GtkWidget* content = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 30);
+    GtkWidget* content = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
     gtk_widget_set_halign(content, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(content, GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_start(content, 50);
-    gtk_widget_set_margin_end(content, 50);
+    gtk_widget_set_margin_start(content, 20);
+    gtk_widget_set_margin_end(content, 20);
+    gtk_widget_set_margin_top(content, 10);
+    gtk_widget_set_margin_bottom(content, 10);
 
     // Left - Board
-    GtkWidget* left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget* left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
 
     GtkWidget* board_label = gtk_label_new("YOUR WATERS");
     GtkStyleContext* board_context = gtk_widget_get_style_context(board_label);
     gtk_style_context_add_class(board_context, "glow-text");
 
     player_board_area = gtk_drawing_area_new();
-    gtk_widget_set_size_request(player_board_area, 660, 660);
+    gtk_widget_set_size_request(player_board_area,
+                                BOARD_SIZE * CELL_SIZE + BOARD_MARGIN * 2,
+                                BOARD_SIZE * CELL_SIZE + BOARD_MARGIN * 2);
     gtk_widget_add_events(player_board_area, GDK_BUTTON_PRESS_MASK | GDK_POINTER_MOTION_MASK);
     g_signal_connect(player_board_area, "draw", G_CALLBACK(on_board_draw), this);
     g_signal_connect(player_board_area, "button-press-event", G_CALLBACK(on_board_button_press), this);
     g_signal_connect(player_board_area, "motion-notify-event", G_CALLBACK(on_board_motion_notify), this);
 
+    // Ensure cursor is visible on ship placement board
+    g_signal_connect(player_board_area, "realize", G_CALLBACK(+[](GtkWidget* widget, gpointer) {
+        GdkWindow* window = gtk_widget_get_window(widget);
+        if (window) {
+            gdk_window_set_cursor(window, NULL);
+        }
+    }), NULL);
+
     gtk_box_pack_start(GTK_BOX(left_panel), board_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(left_panel), player_board_area, FALSE, FALSE, 0);
 
     // Right - Ship selection
-    GtkWidget* right_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 15);
-    gtk_widget_set_size_request(right_panel, 350, -1);
+    GtkWidget* right_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_set_size_request(right_panel, 300, -1);
 
     GtkWidget* ships_label = gtk_label_new("AVAILABLE SHIPS");
     GtkStyleContext* ships_context = gtk_widget_get_style_context(ships_label);
@@ -660,20 +688,20 @@ GtkWidget* UIManager::createShipPlacementScreen() {
 
     // Ship list
     const char* ships[] = {
-        "Aircraft Carrier (5 cells)",
-        "Battleship (4 cells)",
-        "Cruiser (3 cells)",
-        "Submarine (3 cells)",
-        "Destroyer (2 cells)"
+        "Carrier (5)",
+        "Battleship (4)",
+        "Cruiser (3)",
+        "Submarine (3)",
+        "Destroyer (2)"
     };
 
-    GtkWidget* ships_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget* ships_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     for (int i = 0; i < 5; i++) {
-        GtkWidget* ship_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+        GtkWidget* ship_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
 
         // Create clickable button for ship selection
         GtkWidget* ship_button = gtk_button_new_with_label(ships[i]);
-        gtk_widget_set_size_request(ship_button, 250, 35);
+        gtk_widget_set_size_request(ship_button, 160, 30);
 
         // Store the ship type in button data
         g_object_set_data(G_OBJECT(ship_button), "ship_type", GINT_TO_POINTER(i));
@@ -683,28 +711,50 @@ GtkWidget* UIManager::createShipPlacementScreen() {
             ui->selectShipForPlacement((ShipType)ship_type);
         }), this);
 
+        // Delete button for removing ship
+        GtkWidget* delete_button = gtk_button_new_with_label("X");
+        gtk_widget_set_size_request(delete_button, 30, 30);
+        GtkStyleContext* delete_context = gtk_widget_get_style_context(delete_button);
+        gtk_style_context_add_class(delete_context, "danger");
+        g_object_set_data(G_OBJECT(delete_button), "ship_type", GINT_TO_POINTER(i));
+        g_signal_connect(delete_button, "clicked", G_CALLBACK(+[](GtkButton* btn, gpointer data) {
+            UIManager* ui = static_cast<UIManager*>(data);
+            int ship_type = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "ship_type"));
+            ui->clearShip((ShipType)ship_type);
+        }), this);
+
         GtkWidget* placed_label = gtk_label_new("❌");
         ship_status_labels[i] = placed_label;  // Store reference
         ship_buttons[i] = ship_button;  // Store button for graying out
 
         gtk_box_pack_start(GTK_BOX(ship_row), ship_button, TRUE, TRUE, 0);
-        gtk_box_pack_end(GTK_BOX(ship_row), placed_label, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(ship_row), delete_button, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(ship_row), placed_label, FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(ships_box), ship_row, FALSE, FALSE, 0);
     }
 
     // Controls
-    GtkWidget* controls_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    gtk_widget_set_margin_top(controls_box, 20);
+    GtkWidget* controls_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_set_margin_top(controls_box, 15);
 
-    GtkWidget* rotate_btn = gtk_button_new_with_label("ROTATE SHIP");
-    gtk_widget_set_size_request(rotate_btn, -1, 50);
+    GtkWidget* rotate_btn = gtk_button_new_with_label("🔄 ROTATE");
+    gtk_widget_set_size_request(rotate_btn, -1, 40);
     g_signal_connect(rotate_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
         ui->toggleShipOrientation();
     }), this);
 
-    GtkWidget* random_btn = gtk_button_new_with_label("RANDOM PLACEMENT");
-    gtk_widget_set_size_request(random_btn, -1, 50);
+    GtkWidget* clear_btn = gtk_button_new_with_label("🗑️ CLEAR ALL");
+    gtk_widget_set_size_request(clear_btn, -1, 40);
+    GtkStyleContext* clear_context = gtk_widget_get_style_context(clear_btn);
+    gtk_style_context_add_class(clear_context, "secondary");
+    g_signal_connect(clear_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->clearAllShips();
+    }), this);
+
+    GtkWidget* random_btn = gtk_button_new_with_label("🎲 RANDOM");
+    gtk_widget_set_size_request(random_btn, -1, 40);
     GtkStyleContext* random_context = gtk_widget_get_style_context(random_btn);
     gtk_style_context_add_class(random_context, "secondary");
     g_signal_connect(random_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
@@ -712,8 +762,8 @@ GtkWidget* UIManager::createShipPlacementScreen() {
         ui->randomPlaceAllShips();
     }), this);
 
-    GtkWidget* ready_btn = gtk_button_new_with_label("READY FOR BATTLE!");
-    gtk_widget_set_size_request(ready_btn, -1, 60);
+    GtkWidget* ready_btn = gtk_button_new_with_label("⚔️ READY!");
+    gtk_widget_set_size_request(ready_btn, -1, 50);
     ready_battle_button = ready_btn;  // Store reference
     gtk_widget_set_sensitive(ready_btn, FALSE);  // Disabled until all ships placed
     g_signal_connect(ready_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
@@ -723,8 +773,8 @@ GtkWidget* UIManager::createShipPlacementScreen() {
         }
     }), this);
 
-    GtkWidget* back_btn = gtk_button_new_with_label("← BACK TO LOBBY");
-    gtk_widget_set_size_request(back_btn, -1, 40);
+    GtkWidget* back_btn = gtk_button_new_with_label("← BACK");
+    gtk_widget_set_size_request(back_btn, -1, 35);
     GtkStyleContext* back_context = gtk_widget_get_style_context(back_btn);
     gtk_style_context_add_class(back_context, "danger");
     g_signal_connect(back_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
@@ -733,6 +783,7 @@ GtkWidget* UIManager::createShipPlacementScreen() {
     }), this);
 
     gtk_box_pack_start(GTK_BOX(controls_box), rotate_btn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(controls_box), clear_btn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(controls_box), random_btn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(controls_box), ready_btn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(controls_box), back_btn, FALSE, FALSE, 0);
