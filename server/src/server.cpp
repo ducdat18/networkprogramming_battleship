@@ -1,0 +1,263 @@
+#include "server.h"
+#include "client_connection.h"
+#include <iostream>
+#include <cstring>
+#include <thread>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+Server::Server(int port)
+    : port_(port)
+    , server_fd_(-1)
+    , running_(false)
+    , total_connections_(0)
+    , active_matches_(0)
+{
+}
+
+Server::~Server() {
+    stop();
+}
+
+bool Server::start() {
+    if (running_) {
+        std::cerr << "[SERVER] Already running" << std::endl;
+        return false;
+    }
+
+    // Create socket
+    if (!createSocket()) {
+        return false;
+    }
+
+    // Bind to port
+    if (!bindSocket()) {
+        close(server_fd_);
+        return false;
+    }
+
+    // Listen for connections
+    if (!listenSocket()) {
+        close(server_fd_);
+        return false;
+    }
+
+    running_ = true;
+
+    // Start accept thread
+    std::thread accept_thread(&Server::acceptConnections, this);
+    accept_thread.detach();
+
+    return true;
+}
+
+void Server::stop() {
+    if (!running_) {
+        return;
+    }
+
+    std::cout << "[SERVER] Stopping server..." << std::endl;
+    running_ = false;
+
+    // Close all client connections
+    {
+        std::lock_guard<std::mutex> lock(clients_mutex_);
+        for (auto& pair : clients_) {
+            pair.second->disconnect();
+        }
+        clients_.clear();
+    }
+
+    // Close server socket
+    if (server_fd_ >= 0) {
+        close(server_fd_);
+        server_fd_ = -1;
+    }
+
+    std::cout << "[SERVER] Server stopped" << std::endl;
+}
+
+bool Server::createSocket() {
+    server_fd_ = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd_ < 0) {
+        std::cerr << "[ERROR] Failed to create socket: " << strerror(errno) << std::endl;
+        return false;
+    }
+
+    // Set socket options
+    int opt = 1;
+    if (setsockopt(server_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        std::cerr << "[WARNING] setsockopt SO_REUSEADDR failed: " << strerror(errno) << std::endl;
+    }
+
+    if (setsockopt(server_fd_, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
+        std::cerr << "[WARNING] setsockopt SO_REUSEPORT failed: " << strerror(errno) << std::endl;
+    }
+
+    std::cout << "[SERVER] Socket created (fd=" << server_fd_ << ")" << std::endl;
+    return true;
+}
+
+bool Server::bindSocket() {
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;  // Listen on all interfaces
+    address.sin_port = htons(port_);
+
+    if (bind(server_fd_, (struct sockaddr*)&address, sizeof(address)) < 0) {
+        std::cerr << "[ERROR] Failed to bind to port " << port_
+                  << ": " << strerror(errno) << std::endl;
+        return false;
+    }
+
+    std::cout << "[SERVER] Bound to port " << port_ << std::endl;
+    return true;
+}
+
+bool Server::listenSocket() {
+    const int BACKLOG = 128;  // Max pending connections
+
+    if (listen(server_fd_, BACKLOG) < 0) {
+        std::cerr << "[ERROR] Failed to listen: " << strerror(errno) << std::endl;
+        return false;
+    }
+
+    std::cout << "[SERVER] Listening for connections (backlog=" << BACKLOG << ")" << std::endl;
+    return true;
+}
+
+void Server::acceptConnections() {
+    struct sockaddr_in client_addr;
+    socklen_t addr_len = sizeof(client_addr);
+
+    std::cout << "[SERVER] Accept thread started" << std::endl;
+
+    while (running_) {
+        // Accept new connection
+        int client_fd = accept(server_fd_, (struct sockaddr*)&client_addr, &addr_len);
+
+        if (!running_) {
+            break;  // Server stopped
+        }
+
+        if (client_fd < 0) {
+            if (errno == EINTR) {
+                continue;  // Interrupted, try again
+            }
+            std::cerr << "[ERROR] Accept failed: " << strerror(errno) << std::endl;
+            continue;
+        }
+
+        // Get client info
+        char client_ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
+        int client_port = ntohs(client_addr.sin_port);
+
+        std::cout << "[CONNECTION] New client connected: " << client_ip
+                  << ":" << client_port << " (fd=" << client_fd << ")" << std::endl;
+
+        total_connections_++;
+
+        // Create client connection object
+        auto client = std::make_shared<ClientConnection>(client_fd);
+
+        // Add to clients map
+        {
+            std::lock_guard<std::mutex> lock(clients_mutex_);
+            clients_[client_fd] = client;
+        }
+
+        // Handle client in separate thread
+        std::thread client_thread(&Server::handleClient, this, client_fd);
+        client_thread.detach();
+    }
+
+    std::cout << "[SERVER] Accept thread stopped" << std::endl;
+}
+
+void Server::handleClient(int client_fd) {
+    std::cout << "[THREAD] Handler thread started for client fd=" << client_fd << std::endl;
+
+    std::shared_ptr<ClientConnection> client;
+
+    // Get client connection
+    {
+        std::lock_guard<std::mutex> lock(clients_mutex_);
+        auto it = clients_.find(client_fd);
+        if (it == clients_.end()) {
+            std::cerr << "[ERROR] Client fd=" << client_fd << " not found!" << std::endl;
+            return;
+        }
+        client = it->second;
+    }
+
+    // Main message loop
+    while (running_ && client->isConnected()) {
+        MessageHeader header;
+        std::string payload;
+
+        // Receive message
+        if (!client->receiveMessage(header, payload)) {
+            std::cout << "[DISCONNECT] Client fd=" << client_fd << " disconnected" << std::endl;
+            break;
+        }
+
+        std::cout << "[MESSAGE] Received from fd=" << client_fd
+                  << " type=" << (int)header.type
+                  << " length=" << header.length << std::endl;
+
+        // Simple PING/PONG for testing
+        if (header.type == PING) {
+            std::cout << "[PING] Received PING from fd=" << client_fd << std::endl;
+
+            MessageHeader pong_header;
+            pong_header.type = PONG;
+            pong_header.length = 0;
+            pong_header.timestamp = time(nullptr);
+            memset(pong_header.session_token, 0, sizeof(pong_header.session_token));
+
+            if (client->sendMessage(pong_header, "")) {
+                std::cout << "[PONG] Sent PONG to fd=" << client_fd << std::endl;
+            }
+        }
+
+        // TODO: Handle other message types (AUTH, MOVE, etc.)
+    }
+
+    // Cleanup
+    removeClient(client_fd);
+
+    std::cout << "[THREAD] Handler thread stopped for client fd=" << client_fd << std::endl;
+}
+
+void Server::removeClient(int client_fd) {
+    std::lock_guard<std::mutex> lock(clients_mutex_);
+
+    auto it = clients_.find(client_fd);
+    if (it != clients_.end()) {
+        it->second->disconnect();
+        clients_.erase(it);
+        std::cout << "[CLEANUP] Removed client fd=" << client_fd << std::endl;
+    }
+}
+
+void Server::broadcastToAll(const std::string& message) {
+    std::lock_guard<std::mutex> lock(clients_mutex_);
+
+    for (auto& pair : clients_) {
+        // TODO: Implement broadcast
+    }
+}
+
+int Server::getConnectedClients() const {
+    std::lock_guard<std::mutex> lock(clients_mutex_);
+    return clients_.size();
+}
+
+int Server::getActiveMatches() const {
+    return active_matches_;
+}

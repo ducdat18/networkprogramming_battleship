@@ -1,0 +1,25 @@
+# Build artifacts
+bin/
+build/
+*.o
+*.a
+
+# Test artifacts
+/tmp/battleship_server.log
+
+# Data
+data/
+logs/
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

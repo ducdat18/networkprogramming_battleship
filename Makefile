@@ -4,7 +4,7 @@
 
 # Compiler and flags
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -Wextra -O2
+CXXFLAGS = -std=c++14 -Wall -Wextra -O2
 DEBUGFLAGS = -g -DDEBUG
 
 # GTK flags
@@ -19,6 +19,7 @@ SERVER_SRC = server/src
 SERVER_INC = server/include
 COMMON_SRC = common/src
 COMMON_INC = common/include
+TEST_SRC = tests
 BUILD_DIR = build
 BIN_DIR = bin
 
@@ -29,11 +30,32 @@ INCLUDES = -I$(CLIENT_INC) -I$(SERVER_INC) -I$(COMMON_INC)
 COMMON_SOURCES = $(wildcard $(COMMON_SRC)/*.cpp)
 CLIENT_SOURCES = $(wildcard $(CLIENT_SRC)/*.cpp)
 SERVER_SOURCES = $(wildcard $(SERVER_SRC)/*.cpp)
+TEST_SOURCES = $(wildcard $(TEST_SRC)/*.cpp)
 
 # Object files
 COMMON_OBJECTS = $(patsubst $(COMMON_SRC)/%.cpp,$(BUILD_DIR)/common/%.o,$(COMMON_SOURCES))
 CLIENT_OBJECTS = $(patsubst $(CLIENT_SRC)/%.cpp,$(BUILD_DIR)/client/%.o,$(CLIENT_SOURCES))
 SERVER_OBJECTS = $(patsubst $(SERVER_SRC)/%.cpp,$(BUILD_DIR)/server/%.o,$(SERVER_SOURCES))
+
+# Test directories
+UNIT_TEST_DIR = $(TEST_SRC)/unit_tests
+INTEGRATION_TEST_DIR = $(TEST_SRC)/integration_tests
+
+# Test targets
+TEST_BOARD = $(BIN_DIR)/test_board
+TEST_MATCH = $(BIN_DIR)/test_match
+TEST_PROTOCOL = $(BIN_DIR)/test_protocol
+TEST_NETWORK = $(BIN_DIR)/test_network
+TEST_CLIENT_SERVER = $(BIN_DIR)/test_client_server
+
+# Test flags
+GTEST_FLAGS = -lgtest -lgtest_main -lpthread
+
+# Collected test targets
+UNIT_TESTS = $(TEST_BOARD) $(TEST_MATCH) $(TEST_NETWORK)
+# UNIT_TESTS += $(TEST_PROTOCOL)  # Uncomment when ready
+INTEGRATION_TESTS = $(TEST_CLIENT_SERVER)
+ALL_TESTS = $(UNIT_TESTS) $(INTEGRATION_TESTS)
 
 # Targets
 CLIENT_TARGET = $(BIN_DIR)/battleship_client
@@ -72,6 +94,7 @@ directories:
 	@mkdir -p $(BUILD_DIR)/common
 	@mkdir -p $(BUILD_DIR)/client
 	@mkdir -p $(BUILD_DIR)/server
+	@mkdir -p $(BUILD_DIR)/tests
 	@mkdir -p $(BIN_DIR)
 
 # Build client
@@ -83,6 +106,10 @@ $(CLIENT_TARGET): $(COMMON_OBJECTS) $(CLIENT_OBJECTS)
 # Build server
 $(SERVER_TARGET): $(COMMON_OBJECTS) $(SERVER_OBJECTS)
 	@echo "$(YELLOW)🔗 Linking server...$(NC)"
+	@if [ -z "$(SERVER_OBJECTS)" ]; then \
+		echo "$(RED)⚠️  No server source files found$(NC)"; \
+		echo "$(YELLOW)Creating empty server binary...$(NC)"; \
+	fi
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lpthread -lsqlite3
 	@echo "$(GREEN)✅ Server built successfully!$(NC)"
 
@@ -100,6 +127,113 @@ $(BUILD_DIR)/client/%.o: $(CLIENT_SRC)/%.cpp
 $(BUILD_DIR)/server/%.o: $(SERVER_SRC)/%.cpp
 	@echo "$(CYAN)🔧 Compiling $<...$(NC)"
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+# ============== TEST TARGETS ==============
+
+# ===== Unit Tests =====
+
+# Board tests
+$(TEST_BOARD): $(UNIT_TEST_DIR)/board/test_board.cpp $(COMMON_OBJECTS)
+	@echo "$(YELLOW)🧪 Building board tests...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	@echo "$(GREEN)✅ Board tests built!$(NC)"
+
+# Match tests
+$(TEST_MATCH): $(UNIT_TEST_DIR)/match/test_match.cpp $(COMMON_OBJECTS)
+	@echo "$(YELLOW)🧪 Building match tests...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	@echo "$(GREEN)✅ Match tests built!$(NC)"
+
+# Protocol tests (TODO - uncomment when ready)
+# $(TEST_PROTOCOL): $(UNIT_TEST_DIR)/protocol/test_protocol.cpp $(COMMON_OBJECTS)
+# 	@echo "$(YELLOW)🧪 Building protocol tests...$(NC)"
+# 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+# 	@echo "$(GREEN)✅ Protocol tests built!$(NC)"
+
+# Network tests
+$(TEST_NETWORK): $(UNIT_TEST_DIR)/network/test_network.cpp $(COMMON_OBJECTS) build/server/client_connection.o
+	@echo "$(YELLOW)🧪 Building network tests...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	@echo "$(GREEN)✅ Network tests built!$(NC)"
+
+# ===== Integration Tests =====
+
+# Client-Server integration test
+$(TEST_CLIENT_SERVER): $(INTEGRATION_TEST_DIR)/test_client_server.cpp $(COMMON_OBJECTS)
+	@echo "$(YELLOW)🧪 Building client-server integration test...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	@echo "$(GREEN)✅ Client-server test built!$(NC)"
+
+# ===== Build All Tests =====
+
+.PHONY: tests
+tests: banner directories $(ALL_TESTS)
+	@echo "$(GREEN)╔════════════════════════════════════╗$(NC)"
+	@echo "$(GREEN)║    TESTS BUILT SUCCESSFULLY!       ║$(NC)"
+	@echo "$(GREEN)╚════════════════════════════════════╝$(NC)"
+
+# ===== Run Tests =====
+
+# Run all tests
+.PHONY: test
+test: tests
+	@echo "$(CYAN)╔════════════════════════════════════╗$(NC)"
+	@echo "$(CYAN)║       🧪 RUNNING ALL TESTS 🧪     ║$(NC)"
+	@echo "$(CYAN)╚════════════════════════════════════╝$(NC)"
+	@echo ""
+	@$(MAKE) --no-print-directory test-unit
+	@echo ""
+	@echo "$(GREEN)╔════════════════════════════════════╗$(NC)"
+	@echo "$(GREEN)║     ✅ ALL TESTS COMPLETED! ✅     ║$(NC)"
+	@echo "$(GREEN)╚════════════════════════════════════╝$(NC)"
+
+# Run unit tests
+.PHONY: test-unit
+test-unit: $(UNIT_TESTS)
+	@echo "$(CYAN)━━━ Unit Tests ━━━$(NC)"
+	@echo ""
+	@echo "$(YELLOW)📋 Board Tests$(NC)"
+	@./$(TEST_BOARD)
+	@echo ""
+	@echo "$(YELLOW)📋 Match Tests$(NC)"
+	@./$(TEST_MATCH)
+	@echo ""
+	@echo "$(YELLOW)📋 Network Tests$(NC)"
+	@./$(TEST_NETWORK)
+	@echo ""
+	@echo "$(GREEN)✅ Unit tests passed!$(NC)"
+
+# Run integration tests
+.PHONY: test-integration
+test-integration: $(INTEGRATION_TESTS)
+	@echo "$(CYAN)━━━ Integration Tests ━━━$(NC)"
+	@echo ""
+	@echo "$(YELLOW)⚠️  Make sure server is running: ./bin/battleship_server$(NC)"
+	@echo ""
+	@./$(TEST_CLIENT_SERVER)
+	@echo ""
+	@echo "$(GREEN)✅ Integration tests passed!$(NC)"
+
+# Run individual test suites
+.PHONY: test-board
+test-board: $(TEST_BOARD)
+	@echo "$(CYAN)━━━ Board Tests ━━━$(NC)"
+	@./$(TEST_BOARD)
+
+.PHONY: test-match
+test-match: $(TEST_MATCH)
+	@echo "$(CYAN)━━━ Match Tests ━━━$(NC)"
+	@./$(TEST_MATCH)
+
+.PHONY: test-protocol
+test-protocol: $(TEST_PROTOCOL)
+	@echo "$(CYAN)━━━ Protocol Tests ━━━$(NC)"
+	@./$(TEST_PROTOCOL)
+
+.PHONY: test-network
+test-network: $(TEST_NETWORK)
+	@echo "$(CYAN)━━━ Network Tests ━━━$(NC)"
+	@./$(TEST_NETWORK)
 
 # Debug build
 .PHONY: debug
@@ -124,6 +258,14 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -rf $(BIN_DIR)
 	@echo "$(GREEN)✅ Clean complete!$(NC)"
+
+# Clean tests only
+.PHONY: clean-tests
+clean-tests:
+	@echo "$(RED)🧹 Cleaning test files...$(NC)"
+	rm -f $(ALL_TESTS)
+	rm -rf $(BUILD_DIR)/tests
+	@echo "$(GREEN)✅ Test files cleaned!$(NC)"
 
 # Run client
 .PHONY: run-client
@@ -165,6 +307,18 @@ help:
 	@echo "  $(GREEN)make run-client$(NC)    - Build and run client"
 	@echo "  $(GREEN)make run-server$(NC)    - Build and run server"
 	@echo "  $(GREEN)make install-deps$(NC)  - Install required dependencies"
+	@echo ""
+	@echo "$(YELLOW)Testing targets:$(NC)"
+	@echo "  $(GREEN)make tests$(NC)         - Build all tests"
+	@echo "  $(GREEN)make test$(NC)          - Build and run all tests"
+	@echo "  $(GREEN)make test-unit$(NC)     - Run all unit tests"
+	@echo "  $(GREEN)make test-integration$(NC) - Run all integration tests"
+	@echo "  $(GREEN)make test-board$(NC)    - Run board tests only"
+	@echo "  $(GREEN)make test-match$(NC)    - Run match tests only"
+	@echo "  $(GREEN)make test-protocol$(NC) - Run protocol tests only"
+	@echo "  $(GREEN)make test-network$(NC)  - Run network tests only"
+	@echo "  $(GREEN)make clean-tests$(NC)   - Clean test files"
+	@echo ""
 	@echo "  $(GREEN)make help$(NC)          - Show this help message"
 	@echo ""
 	@echo "$(YELLOW)Examples:$(NC)"
@@ -174,3 +328,5 @@ help:
 
 # Phony targets
 .PHONY: all clean client server debug run-client run-server install-deps help banner directories
+.PHONY: tests test test-unit test-integration
+.PHONY: test-board test-match test-protocol test-network clean-tests

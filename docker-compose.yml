@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Battleship Game Server
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: battleship_server
+    ports:
+      - "8888:8888"  # Game server port
+    volumes:
+      - ./data:/app/data  # Persist database
+      - ./logs:/app/logs  # Server logs
+    environment:
+      - SERVER_PORT=8888
+      - DB_PATH=/app/data/battleship.db
+      - LOG_LEVEL=INFO
+      - MAX_CONNECTIONS=100
+    restart: unless-stopped
+    networks:
+      - battleship_network
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+
+  # Development: Server with auto-rebuild
+  server-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: battleship_server_dev
+    ports:
+      - "8889:8888"
+    volumes:
+      - ./:/app  # Mount entire project for development
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - SERVER_PORT=8888
+      - DB_PATH=/app/data/battleship_dev.db
+      - LOG_LEVEL=DEBUG
+    command: /bin/bash -c "make clean && make server && ./bin/battleship_server"
+    networks:
+      - battleship_network
+    profiles:
+      - dev  # Only start with: docker-compose --profile dev up
+
+networks:
+  battleship_network:
+    driver: bridge
+
+volumes:
+  data:
+    driver: local
+  logs:
+    driver: local

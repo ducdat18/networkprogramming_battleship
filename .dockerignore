@@ -1,0 +1,41 @@
+# Build artifacts
+bin/
+build/
+*.o
+*.a
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation (not needed in container)
+*.md
+docs/
+
+# Tests (not needed in production)
+tests/
+
+# Client code (not needed in server container)
+client/
+
+# Assets (not needed in server)
+assets/
+
+# Temporary files
+*.tmp
+*.log
+
+# Data files
+data/
+logs/
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore
