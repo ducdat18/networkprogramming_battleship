@@ -18,7 +18,7 @@ GtkWidget* UIManager::createGameScreen() {
 
     // Logo and title
     GtkWidget* title_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget* logo_label = gtk_label_new("⚓");
+    GtkWidget* logo_label = gtk_label_new("");
     gtk_widget_set_name(logo_label, "logo");
     GtkWidget* title_label = gtk_label_new("BATTLESHIP ONLINE");
     GtkStyleContext* title_context = gtk_widget_get_style_context(title_label);
@@ -28,9 +28,9 @@ GtkWidget* UIManager::createGameScreen() {
 
     // User info
     GtkWidget* user_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
-    GtkWidget* elo_label = gtk_label_new("⭐ ELO: 1250");
-    GtkWidget* winrate_label = gtk_label_new("🏆 68%");
-    GtkWidget* username_label = gtk_label_new("👤 Player_001");
+    GtkWidget* elo_label = gtk_label_new("ELO: 1250");
+    GtkWidget* winrate_label = gtk_label_new("WIN RATE: 68%");
+    GtkWidget* username_label = gtk_label_new("Player_001");
 
     GtkStyleContext* elo_context = gtk_widget_get_style_context(elo_label);
     gtk_style_context_add_class(elo_context, "glow-text");
@@ -89,11 +89,12 @@ GtkWidget* UIManager::createGameScreen() {
 
     // Timer
     timer_label = gtk_label_new("TIME: 00:45");
+    turn_timer_label = timer_label;  // IMPORTANT: Link turn_timer_label to timer_label for updates!
     GtkStyleContext* timer_context = gtk_widget_get_style_context(timer_label);
     gtk_style_context_add_class(timer_context, "title");
 
     // Turn indicator
-    turn_indicator = gtk_label_new("» YOUR TURN «");
+    turn_indicator = gtk_label_new("YOUR TURN");
     GtkStyleContext* turn_context = gtk_widget_get_style_context(turn_indicator);
     gtk_style_context_add_class(turn_context, "glow-text");
 
@@ -113,10 +114,10 @@ GtkWidget* UIManager::createGameScreen() {
     GtkWidget* btn_fire = gtk_button_new_with_label("FIRE!");
     GtkWidget* btn_pause = gtk_button_new_with_label("Pause");
     GtkWidget* btn_draw = gtk_button_new_with_label("Offer Draw");
-    GtkWidget* btn_resign = gtk_button_new_with_label("Resign");
+    GtkWidget* btn_back = gtk_button_new_with_label("BACK TO MENU");
 
-    GtkStyleContext* btn_resign_context = gtk_widget_get_style_context(btn_resign);
-    gtk_style_context_add_class(btn_resign_context, "danger");
+    GtkStyleContext* btn_back_context = gtk_widget_get_style_context(btn_back);
+    gtk_style_context_add_class(btn_back_context, "danger");
 
     GtkStyleContext* btn_pause_context = gtk_widget_get_style_context(btn_pause);
     gtk_style_context_add_class(btn_pause_context, "secondary");
@@ -127,7 +128,10 @@ GtkWidget* UIManager::createGameScreen() {
     g_signal_connect(btn_fire, "clicked", G_CALLBACK(on_fire_clicked), this);
     g_signal_connect(btn_pause, "clicked", G_CALLBACK(on_pause_clicked), this);
     g_signal_connect(btn_draw, "clicked", G_CALLBACK(on_draw_offer_clicked), this);
-    g_signal_connect(btn_resign, "clicked", G_CALLBACK(on_resign_clicked), this);
+    g_signal_connect(btn_back, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->showScreen(SCREEN_MAIN_MENU);
+    }), this);
 
     // Chat
     GtkWidget* chat_frame = gtk_frame_new("Chat");
@@ -146,6 +150,33 @@ GtkWidget* UIManager::createGameScreen() {
     GtkWidget* chat_send_btn = gtk_button_new_with_label("Send");
     gtk_widget_set_size_request(chat_send_btn, 50, -1);
 
+    // Store chat entry reference for later use
+    g_object_set_data(G_OBJECT(chat_send_btn), "chat_entry", chat_entry);
+    g_object_set_data(G_OBJECT(chat_entry), "ui_manager", this);
+
+    // Connect chat send signal
+    g_signal_connect(chat_send_btn, "clicked", G_CALLBACK(+[](GtkButton* btn, gpointer data) {
+        UIManager* ui = (UIManager*)data;
+        GtkWidget* entry = (GtkWidget*)g_object_get_data(G_OBJECT(btn), "chat_entry");
+        if (entry) {
+            const char* text = gtk_entry_get_text(GTK_ENTRY(entry));
+            if (text && strlen(text) > 0) {
+                ui->addChatMessage("You", text, true);
+                gtk_entry_set_text(GTK_ENTRY(entry), "");  // Clear input
+            }
+        }
+    }), this);
+
+    // Also send on Enter key
+    g_signal_connect(chat_entry, "activate", G_CALLBACK(+[](GtkEntry* entry, gpointer data) {
+        UIManager* ui = (UIManager*)data;
+        const char* text = gtk_entry_get_text(entry);
+        if (text && strlen(text) > 0) {
+            ui->addChatMessage("You", text, true);
+            gtk_entry_set_text(entry, "");  // Clear input
+        }
+    }), this);
+
     gtk_box_pack_start(GTK_BOX(chat_input_box), chat_entry, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(chat_input_box), chat_send_btn, FALSE, FALSE, 0);
 
@@ -160,7 +191,7 @@ GtkWidget* UIManager::createGameScreen() {
     gtk_box_pack_start(GTK_BOX(center_panel), btn_fire, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(center_panel), btn_pause, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(center_panel), btn_draw, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(center_panel), btn_resign, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(center_panel), btn_back, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(center_panel), chat_frame, TRUE, TRUE, 0);
 
     // Right panel - Opponent board
@@ -226,7 +257,7 @@ GtkWidget* UIManager::createMainMenuScreen() {
     GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
     gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
 
-    GtkWidget* logo = gtk_label_new("◆");
+    GtkWidget* logo = gtk_label_new("");
     gtk_widget_set_name(logo, "logo");
     GtkWidget* header_title = gtk_label_new("BATTLESHIP ONLINE");
     GtkStyleContext* header_title_ctx = gtk_widget_get_style_context(header_title);
@@ -264,7 +295,7 @@ GtkWidget* UIManager::createMainMenuScreen() {
     gtk_widget_set_margin_bottom(content, 100);
 
     // Title
-    GtkWidget* title = gtk_label_new("◆ BATTLESHIP ◆");
+    GtkWidget* title = gtk_label_new("BATTLESHIP");
     GtkStyleContext* title_context = gtk_widget_get_style_context(title);
     gtk_style_context_add_class(title_context, "title");
 
@@ -273,7 +304,7 @@ GtkWidget* UIManager::createMainMenuScreen() {
     gtk_style_context_add_class(subtitle_context, "glow-text");
 
     // Buttons
-    GtkWidget* btn_vs_bot = gtk_button_new_with_label("» PLAY VS BOT «");
+    GtkWidget* btn_vs_bot = gtk_button_new_with_label("PLAY VS BOT");
     gtk_widget_set_size_request(btn_vs_bot, 400, 80);
     g_signal_connect(btn_vs_bot, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
@@ -287,7 +318,7 @@ GtkWidget* UIManager::createMainMenuScreen() {
         ui->showScreen(SCREEN_SHIP_PLACEMENT);
     }), this);
 
-    GtkWidget* btn_play_online = gtk_button_new_with_label("» PLAY ONLINE «");
+    GtkWidget* btn_play_online = gtk_button_new_with_label("PLAY ONLINE");
     gtk_widget_set_size_request(btn_play_online, 400, 80);
     g_signal_connect(btn_play_online, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
@@ -337,7 +368,7 @@ GtkWidget* UIManager::createLoginScreen() {
     // Logo and title in header
     GtkWidget* header_title_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_widget_set_margin_start(header_title_box, 20);
-    GtkWidget* logo = gtk_label_new("◆");  // Simple diamond instead of emoji
+    GtkWidget* logo = gtk_label_new("");
     GtkWidget* header_title = gtk_label_new("BATTLESHIP ONLINE");
     GtkStyleContext* header_context = gtk_widget_get_style_context(header_title);
     gtk_style_context_add_class(header_context, "glow-text");
@@ -376,7 +407,7 @@ GtkWidget* UIManager::createLoginScreen() {
     gtk_widget_set_margin_bottom(content_box, 50);
 
     // Title
-    GtkWidget* title = gtk_label_new("◆ WELCOME ADMIRAL ◆");
+    GtkWidget* title = gtk_label_new("WELCOME ADMIRAL");
     GtkStyleContext* title_context = gtk_widget_get_style_context(title);
     gtk_style_context_add_class(title_context, "title");
 
@@ -395,7 +426,7 @@ GtkWidget* UIManager::createLoginScreen() {
     gtk_widget_set_size_request(password_entry, 400, 50);
 
     // Buttons
-    GtkWidget* login_btn = gtk_button_new_with_label("» ENTER BATTLE «");
+    GtkWidget* login_btn = gtk_button_new_with_label("ENTER BATTLE");
     gtk_widget_set_size_request(login_btn, 400, 60);
 
     GtkWidget* register_btn = gtk_button_new_with_label("ENLIST NOW");
@@ -443,7 +474,7 @@ GtkWidget* UIManager::createRegisterScreen() {
     GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
     gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
 
-    GtkWidget* header_title = gtk_label_new("⚓ ENLIST - CREATE ACCOUNT");
+    GtkWidget* header_title = gtk_label_new("ENLIST - CREATE ACCOUNT");
     gtk_widget_set_margin_start(header_title, 20);
     GtkStyleContext* header_context = gtk_widget_get_style_context(header_title);
     gtk_style_context_add_class(header_context, "glow-text");
@@ -479,7 +510,7 @@ GtkWidget* UIManager::createRegisterScreen() {
     gtk_entry_set_visibility(GTK_ENTRY(confirm), FALSE);
     gtk_widget_set_size_request(confirm, 400, 50);
 
-    GtkWidget* register_btn = gtk_button_new_with_label("🎖️ CREATE ACCOUNT");
+    GtkWidget* register_btn = gtk_button_new_with_label("CREATE ACCOUNT");
     gtk_widget_set_size_request(register_btn, 400, 60);
     g_signal_connect(register_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
@@ -508,15 +539,15 @@ GtkWidget* UIManager::createLobbyScreen() {
     gtk_widget_set_margin_start(header, 20);
     gtk_widget_set_margin_end(header, 20);
 
-    GtkWidget* title = gtk_label_new("⚓ NAVAL COMMAND CENTER");
+    GtkWidget* title = gtk_label_new("NAVAL COMMAND CENTER");
     GtkStyleContext* title_context = gtk_widget_get_style_context(title);
     gtk_style_context_add_class(title_context, "title");
 
-    GtkWidget* user_info = gtk_label_new("Admiral_001 | ⭐ ELO: 1200");
+    GtkWidget* user_info = gtk_label_new("Admiral_001 | ELO: 1200");
     GtkStyleContext* user_context = gtk_widget_get_style_context(user_info);
     gtk_style_context_add_class(user_context, "glow-text");
 
-    GtkWidget* logout_btn = gtk_button_new_with_label("🚪 LOGOUT");
+    GtkWidget* logout_btn = gtk_button_new_with_label("LOGOUT");
     gtk_widget_set_size_request(logout_btn, 120, 40);
     GtkStyleContext* logout_context = gtk_widget_get_style_context(logout_btn);
     gtk_style_context_add_class(logout_context, "danger");
@@ -561,11 +592,11 @@ GtkWidget* UIManager::createLobbyScreen() {
 
         char player_info[128];
         snprintf(player_info, sizeof(player_info),
-                 "👤 Admiral_%03d | ⭐ %d | 🏆 %d%%",
+                 "Admiral_%03d | ELO: %d | WIN RATE: %d%%",
                  100 + i, 1100 + i * 50, 50 + i * 3);
         GtkWidget* info_label = gtk_label_new(player_info);
 
-        GtkWidget* challenge_btn = gtk_button_new_with_label("⚔️ CHALLENGE");
+        GtkWidget* challenge_btn = gtk_button_new_with_label("CHALLENGE");
         gtk_widget_set_size_request(challenge_btn, 150, 35);
         g_signal_connect(challenge_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
             UIManager* ui = static_cast<UIManager*>(data);
@@ -584,7 +615,7 @@ GtkWidget* UIManager::createLobbyScreen() {
     // Right panel - Leaderboard
     GtkWidget* right_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
 
-    GtkWidget* leaderboard_label = gtk_label_new("🏆 TOP ADMIRALS");
+    GtkWidget* leaderboard_label = gtk_label_new("TOP ADMIRALS");
     GtkStyleContext* leaderboard_context = gtk_widget_get_style_context(leaderboard_label);
     gtk_style_context_add_class(leaderboard_context, "glow-text");
 
@@ -596,7 +627,7 @@ GtkWidget* UIManager::createLobbyScreen() {
 
     for (int i = 1; i <= 20; i++) {
         char rank_info[128];
-        const char* medal = i == 1 ? "🥇" : i == 2 ? "🥈" : i == 3 ? "🥉" : "🎖️";
+        const char* medal = i == 1 ? "[#1]" : i == 2 ? "[#2]" : i == 3 ? "[#3]" : "";
         snprintf(rank_info, sizeof(rank_info),
                  "%s #%d - Admiral_%03d - ELO: %d",
                  medal, i, i, 2000 - i * 50);
@@ -723,7 +754,7 @@ GtkWidget* UIManager::createShipPlacementScreen() {
             ui->clearShip((ShipType)ship_type);
         }), this);
 
-        GtkWidget* placed_label = gtk_label_new("❌");
+        GtkWidget* placed_label = gtk_label_new("[  ]");
         ship_status_labels[i] = placed_label;  // Store reference
         ship_buttons[i] = ship_button;  // Store button for graying out
 
@@ -762,7 +793,7 @@ GtkWidget* UIManager::createShipPlacementScreen() {
         ui->randomPlaceAllShips();
     }), this);
 
-    GtkWidget* ready_btn = gtk_button_new_with_label("⚔️ READY!");
+    GtkWidget* ready_btn = gtk_button_new_with_label("READY FOR BATTLE!");
     gtk_widget_set_size_request(ready_btn, -1, 50);
     ready_battle_button = ready_btn;  // Store reference
     gtk_widget_set_sensitive(ready_btn, FALSE);  // Disabled until all ships placed
@@ -802,9 +833,72 @@ GtkWidget* UIManager::createShipPlacementScreen() {
 }
 
 GtkWidget* UIManager::createReplayScreen() {
-    return gtk_label_new("Replay Screen - TODO");
+    // FR-022: Replay screen
+    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_set_margin_start(main_box, 20);
+    gtk_widget_set_margin_end(main_box, 20);
+    gtk_widget_set_margin_top(main_box, 20);
+    gtk_widget_set_margin_bottom(main_box, 20);
+
+    GtkWidget* title = gtk_label_new("MATCH REPLAY");
+    GtkStyleContext* title_context = gtk_widget_get_style_context(title);
+    gtk_style_context_add_class(title_context, "title");
+
+    GtkWidget* info = gtk_label_new("Match replay functionality\nComing soon in full version");
+
+    GtkWidget* back_btn = gtk_button_new_with_label("BACK TO MENU");
+    gtk_widget_set_size_request(back_btn, 200, 50);
+    g_signal_connect(back_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->showScreen(SCREEN_MAIN_MENU);
+    }), this);
+
+    gtk_box_pack_start(GTK_BOX(main_box), title, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), info, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), back_btn, FALSE, FALSE, 0);
+
+    return main_box;
 }
 
 GtkWidget* UIManager::createProfileScreen() {
-    return gtk_label_new("Profile Screen - TODO");
+    // FR-004: Profile screen
+    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_set_margin_start(main_box, 20);
+    gtk_widget_set_margin_end(main_box, 20);
+    gtk_widget_set_margin_top(main_box, 20);
+    gtk_widget_set_margin_bottom(main_box, 20);
+
+    GtkWidget* title = gtk_label_new("PLAYER PROFILE");
+    GtkStyleContext* title_context = gtk_widget_get_style_context(title);
+    gtk_style_context_add_class(title_context, "title");
+
+    // Stats (FR-029)
+    GtkWidget* stats_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+
+    GtkWidget* username_label = gtk_label_new("Username: Admiral_001");
+    GtkWidget* elo_label = gtk_label_new("ELO Rating: 1250");
+    GtkWidget* games_label = gtk_label_new("Total Games: 42");
+    GtkWidget* wins_label = gtk_label_new("Wins: 28 (66.7%)");
+    GtkWidget* losses_label = gtk_label_new("Losses: 12 (28.6%)");
+    GtkWidget* draws_label = gtk_label_new("Draws: 2 (4.7%)");
+
+    gtk_box_pack_start(GTK_BOX(stats_box), username_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(stats_box), elo_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(stats_box), games_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(stats_box), wins_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(stats_box), losses_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(stats_box), draws_label, FALSE, FALSE, 0);
+
+    GtkWidget* back_btn = gtk_button_new_with_label("BACK TO MENU");
+    gtk_widget_set_size_request(back_btn, 200, 50);
+    g_signal_connect(back_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->showScreen(SCREEN_MAIN_MENU);
+    }), this);
+
+    gtk_box_pack_start(GTK_BOX(main_box), title, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), stats_box, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), back_btn, FALSE, FALSE, 0);
+
+    return main_box;
 }

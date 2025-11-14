@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 void segfault_handler(int sig) {
-    std::cerr << "\n❌ SEGMENTATION FAULT (Signal " << sig << ")" << std::endl;
+    std::cerr << "\nERROR: SEGMENTATION FAULT (Signal " << sig << ")" << std::endl;
     std::cerr << "   This usually means:" << std::endl;
     std::cerr << "   1. X server is not running (install VcXsrv, Xming, or X410)" << std::endl;
     std::cerr << "   2. DISPLAY variable is set but X server is not accessible" << std::endl;
@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
     signal(SIGSEGV, segfault_handler);
 
     std::cout << "==================================" << std::endl;
-    std::cout << "⚓ BATTLESHIP ONLINE - CLIENT ⚓" << std::endl;
+    std::cout << "  BATTLESHIP ONLINE - CLIENT  " << std::endl;
     std::cout << "==================================" << std::endl;
     std::cout << "Version: 1.0" << std::endl;
     std::cout << "Platform: Linux/Ubuntu" << std::endl;
@@ -49,23 +49,23 @@ int main(int argc, char* argv[]) {
 
         // Set up callbacks
         ui_manager.setOnCellClicked([](int row, int col) {
-            std::cout << "🎯 Cell clicked: " << (char)('A' + row) << (col + 1) << std::endl;
+            std::cout << "Cell clicked: " << (char)('A' + row) << (col + 1) << std::endl;
         });
 
         ui_manager.setOnChatSend([](const std::string& message) {
-            std::cout << "💬 Chat: " << message << std::endl;
+            std::cout << "Chat: " << message << std::endl;
         });
 
         ui_manager.setOnResign([]() {
-            std::cout << "🏳️ Player resigned!" << std::endl;
+            std::cout << "Player resigned!" << std::endl;
         });
 
         ui_manager.setOnDrawOffer([]() {
-            std::cout << "🤝 Draw offered!" << std::endl;
+            std::cout << "Draw offered!" << std::endl;
         });
 
-        std::cout << "✅ UI initialized successfully!" << std::endl;
-        std::cout << "🚀 Starting game..." << std::endl << std::endl;
+        std::cout << "OK: UI initialized successfully!" << std::endl;
+        std::cout << "Starting game..." << std::endl << std::endl;
 
         // Run GTK main loop
         ui_manager.run();
@@ -75,10 +75,10 @@ int main(int argc, char* argv[]) {
         delete opponent_board;
 
     } catch (const std::exception& e) {
-        std::cerr << "❌ Error: " << e.what() << std::endl;
+        std::cerr << "ERROR: " << e.what() << std::endl;
         return 1;
     }
 
-    std::cout << std::endl << "👋 Thanks for playing!" << std::endl;
+    std::cout << std::endl << "Thanks for playing!" << std::endl;
     return 0;
 }

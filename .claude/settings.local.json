@@ -21,7 +21,8 @@
       "Bash(echo:*)",
       "Bash(timeout 3 ldd:*)",
       "Bash(/dev/null)",
-      "Bash(make run-client:*)"
+      "Bash(make run-client:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

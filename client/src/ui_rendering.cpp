@@ -273,8 +273,8 @@ void UIManager::drawCell(cairo_t* cr, int row, int col, CellState state, bool is
 
         case CELL_SUNK: {
             // Sunk ship - stretched sprite is drawn in drawBoard() with dark overlay
-            // Just draw explosion effect here
-            assets->drawExplosion(cr, x + size/2, y + size/2, size / 60.0);
+            // Explosion effect disabled to prevent crash/freeze
+            // assets->drawExplosion(cr, x + size/2, y + size/2, size / 60.0);
 
             // Red outline to emphasize
             cairo_set_source_rgba(cr, ColorScheme::HIT_R,

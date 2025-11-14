@@ -27,7 +27,7 @@ void UIManager::placeShipAt(int row, int col) {
     // Try to place the ship
     if (player_board->placeShip(selected_ship_type, pos, current_orientation)) {
         ships_placed[selected_ship_type] = true;
-        std::cout << "✅ Placed " << shipTypeToName(selected_ship_type)
+        std::cout << "[OK] Placed " << shipTypeToName(selected_ship_type)
                   << " at " << (char)('A' + row) << (col + 1) << std::endl;
 
         updateShipStatusUI();
@@ -45,7 +45,7 @@ void UIManager::placeShipAt(int row, int col) {
             gtk_widget_queue_draw(player_board_area);
         }
     } else {
-        std::cout << "❌ Cannot place ship there!" << std::endl;
+        std::cout << "[  ] Cannot place ship there!" << std::endl;
     }
 }
 
@@ -69,12 +69,12 @@ void UIManager::randomPlaceAllShips() {
 }
 
 void UIManager::updateShipStatusUI() {
-    // Update ship status labels to show ✅ for placed ships
+    // Update ship status labels to show [OK] for placed ships
     // And gray out ship buttons for placed ships
     for (int i = 0; i < NUM_SHIPS; i++) {
         if (ship_status_labels[i]) {
             gtk_label_set_text(GTK_LABEL(ship_status_labels[i]),
-                              ships_placed[i] ? "✅" : "❌");
+                              ships_placed[i] ? "[OK]" : "[  ]");
         }
 
         // Gray out (disable) ship button when placed
@@ -88,7 +88,7 @@ void UIManager::updateShipStatusUI() {
         gtk_widget_set_sensitive(ready_battle_button, allShipsPlaced());
     }
 
-    std::cout << "📊 UI Status updated" << std::endl;
+    std::cout << " UI Status updated" << std::endl;
 }
 
 bool UIManager::allShipsPlaced() {

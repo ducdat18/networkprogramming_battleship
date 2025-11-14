@@ -66,11 +66,11 @@ void UIManager::initialize(int argc, char* argv[]) {
         std::cerr << "⚠️ WARNING: DISPLAY environment variable not set!" << std::endl;
         std::cerr << "   You may need to install and run an X server (like VcXsrv or Xming)" << std::endl;
     } else {
-        std::cout << "📺 Display: " << display << std::endl;
+        std::cout << " Display: " << display << std::endl;
     }
 
     gtk_init(&argc, &argv);
-    std::cout << "✅ GTK initialized" << std::endl;
+    std::cout << "OK: GTK initialized" << std::endl;
 
     // Load all assets
     std::cout << "🎨 Loading all assets..." << std::endl;
@@ -155,17 +155,17 @@ void UIManager::initialize(int argc, char* argv[]) {
     g_signal_connect(main_window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
     // Start animation timer - slower to reduce CPU usage
-    std::cout << "⏱️ Starting animation timer..." << std::endl;
+    std::cout << "TIME: Starting animation timer..." << std::endl;
     // IMPORTANT: Don't start animation timer yet - it will crash if boards aren't ready
     // animation_timer_id = g_timeout_add(100, animationCallback, this);
 
     // Show main menu by default
-    std::cout << "🎮 Creating main menu screen..." << std::endl;
+    std::cout << " Creating main menu screen..." << std::endl;
     showScreen(SCREEN_MAIN_MENU);
 
-    std::cout << "📺 Showing window..." << std::endl;
+    std::cout << " Showing window..." << std::endl;
     gtk_widget_show_all(main_window);
-    std::cout << "✅ Window shown successfully!" << std::endl;
+    std::cout << "OK: Window shown successfully!" << std::endl;
 
     // Ensure window gets focus and cursor is visible
     gtk_window_present(GTK_WINDOW(main_window));
@@ -180,7 +180,7 @@ void UIManager::initialize(int argc, char* argv[]) {
     g_idle_add(+[](gpointer data) -> gboolean {
         UIManager* ui = static_cast<UIManager*>(data);
         if (ui->animation_timer_id == 0) {
-            std::cout << "⏱️ Starting animation timer (delayed)..." << std::endl;
+            std::cout << "TIME: Starting animation timer (delayed)..." << std::endl;
             ui->animation_timer_id = g_timeout_add(100, animationCallback, ui);
         }
         // Ensure cursor visibility again after window is realized
@@ -218,6 +218,9 @@ void UIManager::showScreen(UIScreen screen) {
             break;
         case SCREEN_GAME:
             current_screen = createGameScreen();
+            // Start turn timer when game begins
+            is_player_turn = true;
+            startTurnTimer(20);
             break;
         case SCREEN_REPLAY:
             current_screen = createReplayScreen();
@@ -294,15 +297,59 @@ void UIManager::showErrorDialog(const std::string& message) {
 }
 
 void UIManager::showNotification(const std::string& message) {
-    GtkWidget* dialog = gtk_message_dialog_new(
-        GTK_WINDOW(main_window),
-        GTK_DIALOG_MODAL,
-        GTK_MESSAGE_INFO,
-        GTK_BUTTONS_OK,
-        "%s", message.c_str()
-    );
-    gtk_dialog_run(GTK_DIALOG(dialog));
-    gtk_widget_destroy(dialog);
+    // Check if this is a victory/defeat message
+    if (message.find("VICTORY") != std::string::npos || message.find("DEFEAT") != std::string::npos) {
+        GtkWidget* dialog = gtk_dialog_new_with_buttons(
+            message.find("VICTORY") != std::string::npos ? "VICTORY!" : "DEFEAT",
+            GTK_WINDOW(main_window),
+            GTK_DIALOG_MODAL,
+            "BACK TO MENU", GTK_RESPONSE_CANCEL,
+            "REMATCH", GTK_RESPONSE_OK,
+            NULL
+        );
+
+        GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+        GtkWidget* label = gtk_label_new(message.c_str());
+        gtk_widget_set_margin_start(label, 20);
+        gtk_widget_set_margin_end(label, 20);
+        gtk_widget_set_margin_top(label, 20);
+        gtk_widget_set_margin_bottom(label, 20);
+        gtk_container_add(GTK_CONTAINER(content), label);
+        gtk_widget_show_all(content);
+
+        gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+
+        if (response == GTK_RESPONSE_CANCEL) {
+            // Back to menu
+            showScreen(SCREEN_MAIN_MENU);
+        } else if (response == GTK_RESPONSE_OK) {
+            // Rematch - reset boards and go to ship placement
+            if (player_board) player_board->clearBoard();
+            if (opponent_board) {
+                opponent_board->clearBoard();
+                opponent_board->randomPlacement();
+            }
+            shots_fired = 0;
+            hits_count = 0;
+            is_player_turn = true;
+            for (int i = 0; i < NUM_SHIPS; i++) {
+                ships_placed[i] = false;
+            }
+            showScreen(SCREEN_SHIP_PLACEMENT);
+        }
+    } else {
+        // Normal notification
+        GtkWidget* dialog = gtk_message_dialog_new(
+            GTK_WINDOW(main_window),
+            GTK_DIALOG_MODAL,
+            GTK_MESSAGE_INFO,
+            GTK_BUTTONS_OK,
+            "%s", message.c_str()
+        );
+        gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+    }
 }
 
 void UIManager::addChatMessage(const std::string& sender, const std::string& message, bool /*is_self*/) {
@@ -323,14 +370,14 @@ void UIManager::addChatMessage(const std::string& sender, const std::string& mes
 void UIManager::updateTurnIndicator(bool is_player_turn) {
     if (turn_indicator) {
         gtk_label_set_text(GTK_LABEL(turn_indicator),
-                          is_player_turn ? "🎯 YOUR TURN" : "⏳ OPPONENT'S TURN");
+                          is_player_turn ? " YOUR TURN" : " OPPONENT'S TURN");
     }
 }
 
 void UIManager::updateTimer(int seconds_remaining) {
     if (timer_label) {
         char time_str[32];
-        snprintf(time_str, sizeof(time_str), "⏱️ %02d:%02d",
+        snprintf(time_str, sizeof(time_str), "TIME: %02d:%02d",
                 seconds_remaining / 60, seconds_remaining % 60);
         gtk_label_set_text(GTK_LABEL(timer_label), time_str);
     }
@@ -342,13 +389,16 @@ void UIManager::switchTurn() {
 
     if (turn_indicator) {
         if (is_player_turn) {
-            gtk_label_set_text(GTK_LABEL(turn_indicator), "» YOUR TURN «");
+            gtk_label_set_text(GTK_LABEL(turn_indicator), " YOUR TURN ");
         } else {
-            gtk_label_set_text(GTK_LABEL(turn_indicator), "« OPPONENT'S TURN »");
+            gtk_label_set_text(GTK_LABEL(turn_indicator), " OPPONENT'S TURN ");
         }
     }
 
-    std::cout << (is_player_turn ? "» YOUR TURN" : "« OPPONENT'S TURN") << std::endl;
+    std::cout << (is_player_turn ? " YOUR TURN" : " OPPONENT'S TURN") << std::endl;
+
+    // IMPORTANT: Restart timer for new turn (required by FR-015)
+    startTurnTimer(20);
 }
 
 void UIManager::updateGameStats() {
@@ -392,7 +442,7 @@ void UIManager::markSunkShip(int /*row*/, int /*col*/, ShipType ship_type) {
         }
     }
 
-    std::cout << "🔥 SUNK " << shipTypeToName(ship_type) << "!" << std::endl;
+    std::cout << "SUNK: SUNK " << shipTypeToName(ship_type) << "!" << std::endl;
 }
 
 // Bot AI Implementation
@@ -430,16 +480,16 @@ void UIManager::botTakeTurn() {
 
     // Log result
     if (result == SHOT_HIT) {
-        std::cout << "🤖 Bot HIT at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
+        std::cout << "Bot Bot HIT at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
         // Bot continues turn on hit
         g_timeout_add(1000, botTurnCallback, this);  // Shoot again after 1s
     } else if (result == SHOT_SUNK) {
-        std::cout << "🤖 Bot SUNK your ship at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
+        std::cout << "Bot Bot SUNK your ship at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
         // Bot continues turn on sunk
         g_timeout_add(1000, botTurnCallback, this);  // Shoot again after 1s
     } else {
-        std::cout << "🤖 Bot MISS at " << (char)('A' + row) << (col + 1) << std::endl;
-        switchTurn();  // Switch to player turn
+        std::cout << "Bot MISS at " << (char)('A' + row) << (col + 1) << std::endl;
+        switchTurn();  // Switch to player turn - timer restarts inside switchTurn()
     }
 
     // Redraw player board
@@ -449,7 +499,7 @@ void UIManager::botTakeTurn() {
 
     // Check if player lost
     if (player_board->allShipsSunk()) {
-        showNotification("💀 DEFEAT! All your ships destroyed!");
+        showNotification("DEFEAT! All your ships destroyed!");
     }
 }
 
@@ -488,7 +538,7 @@ gboolean on_board_button_press(GtkWidget* widget, GdkEventButton* event, gpointe
             else if (widget == ui->opponent_board_area && ui->opponent_board) {
                 // Check if it's player's turn
                 if (!ui->is_player_turn) {
-                    std::cout << "⏸ Not your turn! Wait for opponent..." << std::endl;
+                    std::cout << " Not your turn! Wait for opponent..." << std::endl;
                     return TRUE;
                 }
 
@@ -566,8 +616,29 @@ void on_draw_offer_clicked(GtkButton* /*button*/, gpointer data) {
     }
 }
 
-void on_pause_clicked(GtkButton* /*button*/, gpointer /*data*/) {
-    std::cout << "⏸ Pause requested" << std::endl;
+void on_pause_clicked(GtkButton* /*button*/, gpointer data) {
+    UIManager* ui = static_cast<UIManager*>(data);
+    std::cout << "Pause requested" << std::endl;
+
+    // Show pause dialog (FR-024)
+    GtkWidget* dialog = gtk_message_dialog_new(
+        GTK_WINDOW(ui->main_window),
+        GTK_DIALOG_MODAL,
+        GTK_MESSAGE_INFO,
+        GTK_BUTTONS_OK,
+        "Game Paused\n\nPress OK to resume"
+    );
+
+    // Stop timer while paused
+    ui->stopTurnTimer();
+
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+
+    // Resume timer
+    ui->startTurnTimer(ui->turn_time_remaining > 0 ? ui->turn_time_remaining : 20);
+
+    std::cout << "Game resumed" << std::endl;
 }
 
 // Target selection implementation
@@ -581,7 +652,7 @@ void UIManager::selectTarget(int row, int col) {
         gtk_widget_set_sensitive(fire_button, TRUE);
     }
 
-    std::cout << "🎯 Target selected: " << (char)('A' + row) << (col + 1) << std::endl;
+    std::cout << " Target selected: " << (char)('A' + row) << (col + 1) << std::endl;
 }
 
 void UIManager::clearTargetSelection() {
@@ -602,7 +673,7 @@ bool UIManager::executeFireAtTarget() {
     }
 
     if (!is_player_turn) {
-        std::cout << "⏸ Not your turn!" << std::endl;
+        std::cout << " Not your turn!" << std::endl;
         return false;
     }
 
@@ -624,16 +695,16 @@ bool UIManager::executeFireAtTarget() {
         if (animation_manager) {
             animation_manager->addExplosion(row, col);
         }
-        std::cout << "💥 HIT at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
+        std::cout << "HIT: HIT at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
     } else if (result == SHOT_SUNK) {
         hits_count++;
         // No explosion animation for sunk ships
-        std::cout << "🔥 SUNK at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
+        std::cout << "SUNK: SUNK at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
     } else {
         if (animation_manager) {
             animation_manager->addSplash(row, col);
         }
-        std::cout << "💦 MISS at " << (char)('A' + row) << (col + 1) << std::endl;
+        std::cout << "MISS: MISS at " << (char)('A' + row) << (col + 1) << std::endl;
     }
 
     // Handle sunk ship
@@ -665,14 +736,13 @@ bool UIManager::executeFireAtTarget() {
     // Check if all ships sunk
     if (opponent_board->allShipsSunk()) {
         stopTurnTimer();
-        showNotification("🎉 VICTORY! All enemy ships destroyed!");
+        showNotification("VICTORY! All enemy ships destroyed!");
         return true;
     }
 
     // Switch turn on miss
     if (result == SHOT_MISS) {
-        switchTurn();
-        stopTurnTimer();
+        switchTurn();  // This will auto-restart timer inside switchTurn()
 
         // If in bot mode and now bot's turn, trigger bot AI after 1 second
         if (is_bot_mode && !is_player_turn) {
@@ -700,7 +770,7 @@ void UIManager::startTurnTimer(int seconds) {
     // Update label immediately
     if (turn_timer_label) {
         char buf[32];
-        snprintf(buf, sizeof(buf), "⏱️ %d s", turn_time_remaining);
+        snprintf(buf, sizeof(buf), "TIME: %d s", turn_time_remaining);
         gtk_label_set_text(GTK_LABEL(turn_timer_label), buf);
     }
 
@@ -715,7 +785,7 @@ void UIManager::stopTurnTimer() {
     }
 
     if (turn_timer_label) {
-        gtk_label_set_text(GTK_LABEL(turn_timer_label), "⏱️ --");
+        gtk_label_set_text(GTK_LABEL(turn_timer_label), "TIME: --");
     }
 }
 
@@ -727,7 +797,7 @@ gboolean UIManager::turnTimerCallback(gpointer data) {
     // Update label
     if (ui->turn_timer_label) {
         char buf[32];
-        snprintf(buf, sizeof(buf), "⏱️ %d s", ui->turn_time_remaining);
+        snprintf(buf, sizeof(buf), "TIME: %d s", ui->turn_time_remaining);
         gtk_label_set_text(GTK_LABEL(ui->turn_timer_label), buf);
     }
 
@@ -741,12 +811,12 @@ gboolean UIManager::turnTimerCallback(gpointer data) {
 }
 
 void UIManager::onTurnTimerExpired() {
-    std::cout << "⏰ Time expired! Turn skipped." << std::endl;
+    std::cout << "TIME EXPIRED! Turn skipped." << std::endl;
 
     // Clear any selected target
     clearTargetSelection();
 
-    // Switch turn
+    // Auto-switch turn when time expires (FR-015)
     switchTurn();
 
     // If in bot mode and now bot's turn, trigger bot AI

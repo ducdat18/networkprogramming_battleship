@@ -47,7 +47,7 @@ bool AssetManager::loadAsset(AssetType type, const std::string& path) {
     }
 
     surfaces[type] = surface;
-    std::cout << "✅ Loaded asset: " << path << std::endl;
+    std::cout << "OK: Loaded asset: " << path << std::endl;
     return true;
 }
 
@@ -58,12 +58,12 @@ bool AssetManager::loadAllAssets() {
     for (const auto& pair : asset_paths) {
         if (!loadAsset(pair.first, pair.second)) {
             all_loaded = false;
-            std::cerr << "❌ Failed to load asset type: " << pair.first << std::endl;
+            std::cerr << "ERROR: Failed to load asset type: " << pair.first << std::endl;
         }
     }
 
     if (all_loaded) {
-        std::cout << "✅ All assets loaded successfully!" << std::endl;
+        std::cout << "OK: All assets loaded successfully!" << std::endl;
     } else {
         std::cerr << "⚠️ Some assets failed to load" << std::endl;
     }
