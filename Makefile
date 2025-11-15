@@ -46,15 +46,17 @@ TEST_BOARD = $(BIN_DIR)/test_board
 TEST_MATCH = $(BIN_DIR)/test_match
 TEST_AUTH_MESSAGES = $(BIN_DIR)/test_auth_messages
 TEST_NETWORK = $(BIN_DIR)/test_network
+TEST_CLIENT_NETWORK = $(BIN_DIR)/test_client_network
 TEST_CLIENT_SERVER = $(BIN_DIR)/test_client_server
 TEST_AUTHENTICATION = $(BIN_DIR)/test_authentication
+TEST_E2E_CLIENT_AUTH = $(BIN_DIR)/test_e2e_client_auth
 
 # Test flags
 GTEST_FLAGS = -lgtest -lgtest_main -lpthread
 
 # Collected test targets
-UNIT_TESTS = $(TEST_BOARD) $(TEST_MATCH) $(TEST_AUTH_MESSAGES) $(TEST_NETWORK)
-INTEGRATION_TESTS = $(TEST_CLIENT_SERVER) $(TEST_AUTHENTICATION)
+UNIT_TESTS = $(TEST_BOARD) $(TEST_MATCH) $(TEST_AUTH_MESSAGES) $(TEST_NETWORK) $(TEST_CLIENT_NETWORK)
+INTEGRATION_TESTS = $(TEST_CLIENT_SERVER) $(TEST_AUTHENTICATION) $(TEST_E2E_CLIENT_AUTH)
 ALL_TESTS = $(UNIT_TESTS) $(INTEGRATION_TESTS)
 
 # Targets
@@ -156,6 +158,12 @@ $(TEST_NETWORK): $(UNIT_TEST_DIR)/network/test_network.cpp $(COMMON_OBJECTS) bui
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
 	@echo "$(GREEN)✅ Network tests built!$(NC)"
 
+# Client network tests
+$(TEST_CLIENT_NETWORK): $(UNIT_TEST_DIR)/client/test_client_network.cpp $(COMMON_OBJECTS) build/client/client_network.o
+	@echo "$(YELLOW)🧪 Building client network tests...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	@echo "$(GREEN)✅ Client network tests built!$(NC)"
+
 # ===== Integration Tests =====
 
 # Client-Server integration test
@@ -169,6 +177,12 @@ $(TEST_AUTHENTICATION): $(INTEGRATION_TEST_DIR)/test_authentication.cpp $(COMMON
 	@echo "$(YELLOW)🧪 Building authentication integration test...$(NC)"
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
 	@echo "$(GREEN)✅ Authentication test built!$(NC)"
+
+# E2E Client Authentication test
+$(TEST_E2E_CLIENT_AUTH): $(INTEGRATION_TEST_DIR)/test_e2e_client_auth.cpp $(COMMON_OBJECTS) build/client/client_network.o
+	@echo "$(YELLOW)🧪 Building E2E client auth test...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	@echo "$(GREEN)✅ E2E client auth test built!$(NC)"
 
 # ===== Build All Tests =====
 
@@ -204,10 +218,16 @@ test-unit: $(UNIT_TESTS)
 	@echo "$(YELLOW)📋 Match Tests$(NC)"
 	@./$(TEST_MATCH)
 	@echo ""
+	@echo "$(YELLOW)📋 Authentication Message Tests$(NC)"
+	@./$(TEST_AUTH_MESSAGES)
+	@echo ""
 	@echo "$(YELLOW)📋 Network Tests$(NC)"
 	@./$(TEST_NETWORK)
 	@echo ""
-	@echo "$(GREEN)✅ Unit tests passed!$(NC)"
+	@echo "$(YELLOW)📋 Client Network Tests$(NC)"
+	@./$(TEST_CLIENT_NETWORK)
+	@echo ""
+	@echo "$(GREEN)✅ All unit tests passed!$(NC)"
 
 # Run integration tests
 .PHONY: test-integration

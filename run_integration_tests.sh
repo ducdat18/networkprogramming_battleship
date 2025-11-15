@@ -118,7 +118,7 @@ else
     echo -e "${CYAN}[3/4] Building integration tests...${NC}"
 fi
 
-make bin/test_client_server bin/test_authentication > /dev/null 2>&1 || {
+make bin/test_client_server bin/test_authentication bin/test_e2e_client_auth > /dev/null 2>&1 || {
     echo -e "${RED}Error: Failed to build integration tests${NC}"
     exit 1
 }
@@ -140,6 +140,11 @@ echo ""
 # Run authentication tests (with DISABLED tests enabled)
 echo -e "${YELLOW}Running authentication tests...${NC}"
 ./bin/test_authentication --gtest_also_run_disabled_tests
+echo ""
+
+# Run E2E client authentication tests (with DISABLED tests enabled)
+echo -e "${YELLOW}Running E2E client authentication tests...${NC}"
+./bin/test_e2e_client_auth --gtest_also_run_disabled_tests
 
 # Success
 echo ""

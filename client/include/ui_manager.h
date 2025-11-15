@@ -5,6 +5,7 @@
 #include <cairo.h>
 #include "game_state.h"
 #include "animation.h"
+#include "client_network.h"
 #include <string>
 #include <functional>
 
@@ -248,6 +249,24 @@ public:
     void stopTurnTimer();
     static gboolean turnTimerCallback(gpointer data);
     void onTurnTimerExpired();
+
+    // Network
+    ClientNetwork* network;
+    void connectToServer(const std::string& host, int port);
+    void handleRegisterResponse(bool success, uint32_t user_id, const std::string& error);
+    void handleLoginResponse(bool success, uint32_t user_id, const std::string& display_name,
+                            int32_t elo_rating, const std::string& session_token, const std::string& error);
+    void handleLogoutResponse(bool success);
+    void showErrorDialog(const std::string& title, const std::string& message);
+    void showInfoDialog(const std::string& title, const std::string& message);
+
+    // Login/Register screen widgets (need to access in callbacks)
+    GtkWidget* login_username_entry;
+    GtkWidget* login_password_entry;
+    GtkWidget* register_username_entry;
+    GtkWidget* register_password_entry;
+    GtkWidget* register_display_name_entry;
+    GtkWidget* register_confirm_entry;
 };
 
 // GTK signal handlers (must be extern "C")

@@ -416,14 +416,14 @@ GtkWidget* UIManager::createLoginScreen() {
     gtk_style_context_add_class(subtitle_context, "glow-text");
 
     // Input fields
-    GtkWidget* username_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(username_entry), "Username");
-    gtk_widget_set_size_request(username_entry, 400, 50);
+    login_username_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(login_username_entry), "Username");
+    gtk_widget_set_size_request(login_username_entry, 400, 50);
 
-    GtkWidget* password_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(password_entry), "Password");
-    gtk_entry_set_visibility(GTK_ENTRY(password_entry), FALSE);
-    gtk_widget_set_size_request(password_entry, 400, 50);
+    login_password_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(login_password_entry), "Password");
+    gtk_entry_set_visibility(GTK_ENTRY(login_password_entry), FALSE);
+    gtk_widget_set_size_request(login_password_entry, 400, 50);
 
     // Buttons
     GtkWidget* login_btn = gtk_button_new_with_label("ENTER BATTLE");
@@ -439,8 +439,8 @@ GtkWidget* UIManager::createLoginScreen() {
 
     gtk_box_pack_start(GTK_BOX(content_box), title, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(content_box), subtitle, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(content_box), username_entry, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(content_box), password_entry, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), login_username_entry, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), login_password_entry, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(content_box), login_btn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(content_box), register_btn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(content_box), footer, FALSE, FALSE, 0);
@@ -449,7 +449,25 @@ GtkWidget* UIManager::createLoginScreen() {
     g_signal_connect(login_btn, "clicked",
                     G_CALLBACK(+[](GtkButton*, gpointer data) {
                         UIManager* ui = static_cast<UIManager*>(data);
-                        ui->showScreen(SCREEN_LOBBY);
+
+                        // Get username and password
+                        const char* username = gtk_entry_get_text(GTK_ENTRY(ui->login_username_entry));
+                        const char* password = gtk_entry_get_text(GTK_ENTRY(ui->login_password_entry));
+
+                        // Validate input
+                        if (strlen(username) == 0 || strlen(password) == 0) {
+                            ui->showErrorDialog("Login Error", "Please enter both username and password");
+                            return;
+                        }
+
+                        std::cout << "[UI] Login attempt: " << username << std::endl;
+
+                        // Call network API
+                        ui->network->loginUser(username, password,
+                            [ui](bool success, uint32_t user_id, const std::string& display_name,
+                                 int32_t elo_rating, const std::string& session_token, const std::string& error) {
+                                ui->handleLoginResponse(success, user_id, display_name, elo_rating, session_token, error);
+                            });
                     }), this);
 
     g_signal_connect(register_btn, "clicked",
@@ -496,30 +514,66 @@ GtkWidget* UIManager::createRegisterScreen() {
     gtk_widget_set_halign(content_box, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(content_box, GTK_ALIGN_CENTER);
 
-    GtkWidget* username = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(username), "Username (min 3 characters)");
-    gtk_widget_set_size_request(username, 400, 50);
+    register_username_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(register_username_entry), "Username (min 3 characters)");
+    gtk_widget_set_size_request(register_username_entry, 400, 50);
 
-    GtkWidget* password = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(password), "Password (min 6 characters)");
-    gtk_entry_set_visibility(GTK_ENTRY(password), FALSE);
-    gtk_widget_set_size_request(password, 400, 50);
+    register_display_name_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(register_display_name_entry), "Display Name");
+    gtk_widget_set_size_request(register_display_name_entry, 400, 50);
 
-    GtkWidget* confirm = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(confirm), "Confirm Password");
-    gtk_entry_set_visibility(GTK_ENTRY(confirm), FALSE);
-    gtk_widget_set_size_request(confirm, 400, 50);
+    register_password_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(register_password_entry), "Password (min 6 characters)");
+    gtk_entry_set_visibility(GTK_ENTRY(register_password_entry), FALSE);
+    gtk_widget_set_size_request(register_password_entry, 400, 50);
+
+    register_confirm_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(register_confirm_entry), "Confirm Password");
+    gtk_entry_set_visibility(GTK_ENTRY(register_confirm_entry), FALSE);
+    gtk_widget_set_size_request(register_confirm_entry, 400, 50);
 
     GtkWidget* register_btn = gtk_button_new_with_label("CREATE ACCOUNT");
     gtk_widget_set_size_request(register_btn, 400, 60);
     g_signal_connect(register_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
-        ui->showScreen(SCREEN_LOGIN);
+
+        // Get form data
+        const char* username = gtk_entry_get_text(GTK_ENTRY(ui->register_username_entry));
+        const char* display_name = gtk_entry_get_text(GTK_ENTRY(ui->register_display_name_entry));
+        const char* password = gtk_entry_get_text(GTK_ENTRY(ui->register_password_entry));
+        const char* confirm = gtk_entry_get_text(GTK_ENTRY(ui->register_confirm_entry));
+
+        // Validate input
+        if (strlen(username) < 3) {
+            ui->showErrorDialog("Registration Error", "Username must be at least 3 characters");
+            return;
+        }
+        if (strlen(display_name) == 0) {
+            ui->showErrorDialog("Registration Error", "Please enter a display name");
+            return;
+        }
+        if (strlen(password) < 6) {
+            ui->showErrorDialog("Registration Error", "Password must be at least 6 characters");
+            return;
+        }
+        if (strcmp(password, confirm) != 0) {
+            ui->showErrorDialog("Registration Error", "Passwords do not match");
+            return;
+        }
+
+        std::cout << "[UI] Register attempt: " << username << std::endl;
+
+        // Call network API (password hashing should be done here in production)
+        ui->network->registerUser(username, password, display_name,
+            [ui](bool success, uint32_t user_id, const std::string& error) {
+                ui->handleRegisterResponse(success, user_id, error);
+            });
     }), this);
 
-    gtk_box_pack_start(GTK_BOX(content_box), username, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(content_box), password, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(content_box), confirm, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), register_username_entry, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), register_display_name_entry, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), register_password_entry, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_box), register_confirm_entry, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(content_box), register_btn, FALSE, FALSE, 0);
 
     gtk_box_pack_start(GTK_BOX(main_box), header, FALSE, FALSE, 0);

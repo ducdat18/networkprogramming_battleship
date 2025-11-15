@@ -22,7 +22,11 @@ UIManager::UIManager()
       shots_label_widget(nullptr), hits_label_widget(nullptr), accuracy_label_widget(nullptr),
       selected_target_row(-1), selected_target_col(-1), has_target_selected(false),
       fire_button(nullptr), turn_time_remaining(20), turn_timer_id(0), turn_timer_label(nullptr),
-      animation_manager(nullptr), is_bot_mode(false) {
+      animation_manager(nullptr), is_bot_mode(false),
+      network(nullptr),
+      login_username_entry(nullptr), login_password_entry(nullptr),
+      register_username_entry(nullptr), register_password_entry(nullptr),
+      register_display_name_entry(nullptr), register_confirm_entry(nullptr) {
     // Initialize ship placement tracking
     for (int i = 0; i < NUM_SHIPS; i++) {
         ships_placed[i] = false;
@@ -32,6 +36,9 @@ UIManager::UIManager()
 
     // Create animation manager
     animation_manager = new AnimationManager();
+
+    // Create network manager
+    network = new ClientNetwork();
 }
 
 UIManager::~UIManager() {
@@ -51,6 +58,11 @@ UIManager::~UIManager() {
     // Cleanup animation manager
     if (animation_manager) {
         delete animation_manager;
+    }
+
+    // Cleanup network
+    if (network) {
+        delete network;
     }
 
     // Cleanup assets
@@ -159,9 +171,9 @@ void UIManager::initialize(int argc, char* argv[]) {
     // IMPORTANT: Don't start animation timer yet - it will crash if boards aren't ready
     // animation_timer_id = g_timeout_add(100, animationCallback, this);
 
-    // Show main menu by default
-    std::cout << " Creating main menu screen..." << std::endl;
-    showScreen(SCREEN_MAIN_MENU);
+    // Show login screen by default (user must authenticate first)
+    std::cout << "📋 Creating login screen..." << std::endl;
+    showScreen(SCREEN_LOGIN);
 
     std::cout << " Showing window..." << std::endl;
     gtk_widget_show_all(main_window);
@@ -190,6 +202,10 @@ void UIManager::initialize(int argc, char* argv[]) {
         }
         return FALSE;  // Don't repeat
     }, this);
+
+    // Connect to server
+    std::cout << "🌐 Connecting to game server..." << std::endl;
+    connectToServer("127.0.0.1", 8888);
 }
 
 void UIManager::showScreen(UIScreen screen) {
@@ -829,4 +845,142 @@ void UIManager::onTurnTimerExpired() {
         // Player's turn again, start timer
         startTurnTimer(20);
     }
+}
+
+// ==================== Network Integration ====================
+
+void UIManager::connectToServer(const std::string& host, int port) {
+    std::cout << "[UI] Connecting to server..." << std::endl;
+
+    network->connect(host, port, [this](bool connected, const std::string& error) {
+        if (connected) {
+            std::cout << "[UI] Connected to server" << std::endl;
+        } else {
+            std::cerr << "[UI] Connection failed: " << error << std::endl;
+            showErrorDialog("Connection Error", "Failed to connect to server:\n" + error);
+        }
+    });
+}
+
+void UIManager::handleRegisterResponse(bool success, uint32_t user_id, const std::string& error) {
+    // Schedule GTK operations in main thread
+    struct CallbackData {
+        UIManager* ui;
+        bool success;
+        uint32_t user_id;
+        std::string error;
+    };
+
+    CallbackData* data = new CallbackData{this, success, user_id, error};
+
+    g_idle_add([](gpointer user_data) -> gboolean {
+        CallbackData* data = static_cast<CallbackData*>(user_data);
+
+        if (data->success) {
+            std::cout << "[UI] Registration successful! User ID: " << data->user_id << std::endl;
+            data->ui->showInfoDialog("Registration Successful",
+                          "Account created successfully!\nYou can now login with your credentials.");
+            // Switch to login screen
+            data->ui->showScreen(SCREEN_LOGIN);
+        } else {
+            std::cerr << "[UI] Registration failed: " << data->error << std::endl;
+            data->ui->showErrorDialog("Registration Failed", data->error);
+        }
+
+        delete data;
+        return FALSE;  // Don't repeat
+    }, data);
+}
+
+void UIManager::handleLoginResponse(bool success, uint32_t user_id, const std::string& display_name,
+                                    int32_t elo_rating, const std::string& session_token, const std::string& error) {
+    // Schedule GTK operations in main thread
+    struct CallbackData {
+        UIManager* ui;
+        bool success;
+        uint32_t user_id;
+        std::string display_name;
+        int32_t elo_rating;
+        std::string error;
+    };
+
+    CallbackData* data = new CallbackData{this, success, user_id, display_name, elo_rating, error};
+
+    g_idle_add([](gpointer user_data) -> gboolean {
+        CallbackData* data = static_cast<CallbackData*>(user_data);
+
+        if (data->success) {
+            std::cout << "[UI] Login successful!" << std::endl;
+            std::cout << "  User ID: " << data->user_id << std::endl;
+            std::cout << "  Display Name: " << data->display_name << std::endl;
+            std::cout << "  ELO: " << data->elo_rating << std::endl;
+
+            // Update current player info
+            data->ui->current_player.user_id = data->user_id;
+            data->ui->current_player.username = data->display_name;
+            data->ui->current_player.display_name = data->display_name;
+            data->ui->current_player.elo_rating = data->elo_rating;
+            data->ui->current_player.status = STATUS_ONLINE;
+
+            // Show main menu
+            data->ui->showScreen(SCREEN_MAIN_MENU);
+        } else {
+            std::cerr << "[UI] Login failed: " << data->error << std::endl;
+            data->ui->showErrorDialog("Login Failed", data->error);
+        }
+
+        delete data;
+        return FALSE;  // Don't repeat
+    }, data);
+
+    // Suppress unused warning
+    (void)session_token;
+}
+
+void UIManager::handleLogoutResponse(bool success) {
+    // Schedule GTK operations in main thread
+    struct CallbackData {
+        UIManager* ui;
+        bool success;
+    };
+
+    CallbackData* data = new CallbackData{this, success};
+
+    g_idle_add([](gpointer user_data) -> gboolean {
+        CallbackData* data = static_cast<CallbackData*>(user_data);
+
+        if (data->success) {
+            std::cout << "[UI] Logout successful" << std::endl;
+            data->ui->showScreen(SCREEN_LOGIN);
+        } else {
+            std::cerr << "[UI] Logout failed" << std::endl;
+        }
+
+        delete data;
+        return FALSE;  // Don't repeat
+    }, data);
+}
+
+void UIManager::showErrorDialog(const std::string& title, const std::string& message) {
+    GtkWidget* dialog = gtk_message_dialog_new(GTK_WINDOW(main_window),
+                                               GTK_DIALOG_DESTROY_WITH_PARENT,
+                                               GTK_MESSAGE_ERROR,
+                                               GTK_BUTTONS_OK,
+                                               "%s", title.c_str());
+    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
+                                             "%s", message.c_str());
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+}
+
+void UIManager::showInfoDialog(const std::string& title, const std::string& message) {
+    GtkWidget* dialog = gtk_message_dialog_new(GTK_WINDOW(main_window),
+                                               GTK_DIALOG_DESTROY_WITH_PARENT,
+                                               GTK_MESSAGE_INFO,
+                                               GTK_BUTTONS_OK,
+                                               "%s", title.c_str());
+    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
+                                             "%s", message.c_str());
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
 }
