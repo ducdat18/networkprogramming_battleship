@@ -1,5 +1,7 @@
 #include "server.h"
 #include "client_connection.h"
+#include "message_handler.h"
+#include "auth_handler.h"
 #include <iostream>
 #include <cstring>
 #include <thread>
@@ -19,6 +21,12 @@ Server::Server(int port)
 
 Server::~Server() {
     stop();
+
+    // Cleanup handlers
+    for (auto handler : handlers_) {
+        delete handler;
+    }
+    handlers_.clear();
 }
 
 bool Server::start() {
@@ -26,6 +34,9 @@ bool Server::start() {
         std::cerr << "[SERVER] Already running" << std::endl;
         return false;
     }
+
+    // Setup message handlers
+    setupHandlers();
 
     // Create socket
     if (!createSocket()) {
@@ -51,6 +62,21 @@ bool Server::start() {
     accept_thread.detach();
 
     return true;
+}
+
+void Server::setupHandlers() {
+    std::lock_guard<std::mutex> lock(handlers_mutex_);
+
+    std::cout << "[SERVER] Setting up message handlers..." << std::endl;
+
+    // Add handlers for different message types
+    handlers_.push_back(new AuthHandler());
+
+    // TODO: Add other handlers
+    // handlers_.push_back(new MatchmakingHandler());
+    // handlers_.push_back(new GameplayHandler());
+
+    std::cout << "[SERVER] " << handlers_.size() << " handlers registered" << std::endl;
 }
 
 void Server::stop() {
@@ -210,22 +236,10 @@ void Server::handleClient(int client_fd) {
                   << " type=" << (int)header.type
                   << " length=" << header.length << std::endl;
 
-        // Simple PING/PONG for testing
-        if (header.type == PING) {
-            std::cout << "[PING] Received PING from fd=" << client_fd << std::endl;
-
-            MessageHeader pong_header;
-            pong_header.type = PONG;
-            pong_header.length = 0;
-            pong_header.timestamp = time(nullptr);
-            memset(pong_header.session_token, 0, sizeof(pong_header.session_token));
-
-            if (client->sendMessage(pong_header, "")) {
-                std::cout << "[PONG] Sent PONG to fd=" << client_fd << std::endl;
-            }
+        // Route message to appropriate handler
+        if (!routeMessage(client.get(), header, payload)) {
+            std::cerr << "[ERROR] Failed to route message type=" << (int)header.type << std::endl;
         }
-
-        // TODO: Handle other message types (AUTH, MOVE, etc.)
     }
 
     // Cleanup
@@ -260,4 +274,32 @@ int Server::getConnectedClients() const {
 
 int Server::getActiveMatches() const {
     return active_matches_;
+}
+
+bool Server::routeMessage(ClientConnection* client,
+                         const MessageHeader& header,
+                         const std::string& payload) {
+    std::lock_guard<std::mutex> lock(handlers_mutex_);
+
+    // Try PING/PONG first (keep for backwards compatibility)
+    if (header.type == static_cast<uint8_t>(PING)) {
+        MessageHeader pong_header;
+        pong_header.type = static_cast<uint8_t>(PONG);
+        pong_header.length = 0;
+        pong_header.timestamp = time(nullptr);
+        memset(pong_header.session_token, 0, sizeof(pong_header.session_token));
+
+        return client->sendMessage(pong_header, "");
+    }
+
+    // Route to registered handlers
+    for (auto handler : handlers_) {
+        if (handler->canHandle(static_cast<MessageType>(header.type))) {
+            return handler->handleMessage(client, header, payload);
+        }
+    }
+
+    // No handler found
+    std::cerr << "[ROUTER] No handler for message type=" << (int)header.type << std::endl;
+    return false;
 }

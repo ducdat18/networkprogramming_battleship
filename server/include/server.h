@@ -11,6 +11,7 @@
 
 // Forward declarations
 class ClientConnection;
+class MessageHandler;
 
 /**
  * Main server class for Battleship game
@@ -42,6 +43,12 @@ private:
     void removeClient(int client_fd);
     void broadcastToAll(const std::string& message);
 
+    // Message routing
+    void setupHandlers();
+    bool routeMessage(ClientConnection* client,
+                     const MessageHeader& header,
+                     const std::string& payload);
+
     // Configuration
     int port_;
     int server_fd_;
@@ -54,6 +61,10 @@ private:
     // Statistics
     std::atomic<int> total_connections_;
     std::atomic<int> active_matches_;
+
+    // Message handlers
+    std::vector<MessageHandler*> handlers_;
+    std::mutex handlers_mutex_;
 };
 
 #endif // SERVER_H

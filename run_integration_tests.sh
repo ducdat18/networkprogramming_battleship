@@ -64,7 +64,14 @@ fi
 
 # Start server
 if [ "$USE_DOCKER" = true ]; then
-    echo -e "${CYAN}[1/4] Starting server in Docker...${NC}"
+    echo -e "${CYAN}[1/5] Building Docker image...${NC}"
+    docker compose build || {
+        echo -e "${RED}Error: Failed to build Docker image${NC}"
+        exit 1
+    }
+    echo ""
+
+    echo -e "${CYAN}[2/5] Starting server in Docker...${NC}"
     docker compose up -d
     echo "Waiting for server to start..."
     sleep 3
@@ -87,7 +94,12 @@ else
 fi
 
 # Check if server is listening
-echo -e "${CYAN}[2/4] Checking server status...${NC}"
+if [ "$USE_DOCKER" = true ]; then
+    echo -e "${CYAN}[3/5] Checking server status...${NC}"
+else
+    echo -e "${CYAN}[2/4] Checking server status...${NC}"
+fi
+
 if nc -z localhost $SERVER_PORT 2>/dev/null; then
     echo -e "${GREEN}✓ Server is listening on port $SERVER_PORT${NC}"
 else
@@ -100,18 +112,34 @@ else
 fi
 
 # Build integration tests
-echo -e "${CYAN}[3/4] Building integration tests...${NC}"
-make bin/test_client_server > /dev/null 2>&1 || {
+if [ "$USE_DOCKER" = true ]; then
+    echo -e "${CYAN}[4/5] Building integration tests...${NC}"
+else
+    echo -e "${CYAN}[3/4] Building integration tests...${NC}"
+fi
+
+make bin/test_client_server bin/test_authentication > /dev/null 2>&1 || {
     echo -e "${RED}Error: Failed to build integration tests${NC}"
     exit 1
 }
 
 # Run integration tests
 echo ""
-echo -e "${CYAN}[4/4] Running integration tests...${NC}"
+if [ "$USE_DOCKER" = true ]; then
+    echo -e "${CYAN}[5/5] Running integration tests...${NC}"
+else
+    echo -e "${CYAN}[4/4] Running integration tests...${NC}"
+fi
 echo ""
 
+# Run client-server tests
+echo -e "${YELLOW}Running client-server tests...${NC}"
 ./bin/test_client_server
+echo ""
+
+# Run authentication tests (with DISABLED tests enabled)
+echo -e "${YELLOW}Running authentication tests...${NC}"
+./bin/test_authentication --gtest_also_run_disabled_tests
 
 # Success
 echo ""

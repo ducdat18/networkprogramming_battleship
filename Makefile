@@ -44,17 +44,17 @@ INTEGRATION_TEST_DIR = $(TEST_SRC)/integration_tests
 # Test targets
 TEST_BOARD = $(BIN_DIR)/test_board
 TEST_MATCH = $(BIN_DIR)/test_match
-TEST_PROTOCOL = $(BIN_DIR)/test_protocol
+TEST_AUTH_MESSAGES = $(BIN_DIR)/test_auth_messages
 TEST_NETWORK = $(BIN_DIR)/test_network
 TEST_CLIENT_SERVER = $(BIN_DIR)/test_client_server
+TEST_AUTHENTICATION = $(BIN_DIR)/test_authentication
 
 # Test flags
 GTEST_FLAGS = -lgtest -lgtest_main -lpthread
 
 # Collected test targets
-UNIT_TESTS = $(TEST_BOARD) $(TEST_MATCH) $(TEST_NETWORK)
-# UNIT_TESTS += $(TEST_PROTOCOL)  # Uncomment when ready
-INTEGRATION_TESTS = $(TEST_CLIENT_SERVER)
+UNIT_TESTS = $(TEST_BOARD) $(TEST_MATCH) $(TEST_AUTH_MESSAGES) $(TEST_NETWORK)
+INTEGRATION_TESTS = $(TEST_CLIENT_SERVER) $(TEST_AUTHENTICATION)
 ALL_TESTS = $(UNIT_TESTS) $(INTEGRATION_TESTS)
 
 # Targets
@@ -144,11 +144,11 @@ $(TEST_MATCH): $(UNIT_TEST_DIR)/match/test_match.cpp $(COMMON_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
 	@echo "$(GREEN)✅ Match tests built!$(NC)"
 
-# Protocol tests (TODO - uncomment when ready)
-# $(TEST_PROTOCOL): $(UNIT_TEST_DIR)/protocol/test_protocol.cpp $(COMMON_OBJECTS)
-# 	@echo "$(YELLOW)🧪 Building protocol tests...$(NC)"
-# 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
-# 	@echo "$(GREEN)✅ Protocol tests built!$(NC)"
+# Authentication message tests
+$(TEST_AUTH_MESSAGES): $(UNIT_TEST_DIR)/protocol/test_auth_messages.cpp $(COMMON_OBJECTS)
+	@echo "$(YELLOW)🧪 Building authentication message tests...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	@echo "$(GREEN)✅ Authentication message tests built!$(NC)"
 
 # Network tests
 $(TEST_NETWORK): $(UNIT_TEST_DIR)/network/test_network.cpp $(COMMON_OBJECTS) build/server/client_connection.o
@@ -163,6 +163,12 @@ $(TEST_CLIENT_SERVER): $(INTEGRATION_TEST_DIR)/test_client_server.cpp $(COMMON_O
 	@echo "$(YELLOW)🧪 Building client-server integration test...$(NC)"
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
 	@echo "$(GREEN)✅ Client-server test built!$(NC)"
+
+# Authentication integration test
+$(TEST_AUTHENTICATION): $(INTEGRATION_TEST_DIR)/test_authentication.cpp $(COMMON_OBJECTS)
+	@echo "$(YELLOW)🧪 Building authentication integration test...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	@echo "$(GREEN)✅ Authentication test built!$(NC)"
 
 # ===== Build All Tests =====
 
