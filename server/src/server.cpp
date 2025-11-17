@@ -2,6 +2,7 @@
 #include "client_connection.h"
 #include "message_handler.h"
 #include "auth_handler.h"
+#include "database.h"
 #include <iostream>
 #include <cstring>
 #include <thread>
@@ -14,9 +15,19 @@ Server::Server(int port)
     : port_(port)
     , server_fd_(-1)
     , running_(false)
+    , db_(nullptr)
     , total_connections_(0)
     , active_matches_(0)
 {
+    // Initialize database
+    db_ = new DatabaseManager("data/battleship.db");
+    if (!db_->isOpen()) {
+        std::cerr << "[SERVER] Failed to open database!" << std::endl;
+        delete db_;
+        db_ = nullptr;
+    } else {
+        std::cout << "[SERVER] Database initialized successfully" << std::endl;
+    }
 }
 
 Server::~Server() {
@@ -27,6 +38,12 @@ Server::~Server() {
         delete handler;
     }
     handlers_.clear();
+
+    // Cleanup database
+    if (db_) {
+        delete db_;
+        db_ = nullptr;
+    }
 }
 
 bool Server::start() {
@@ -70,7 +87,11 @@ void Server::setupHandlers() {
     std::cout << "[SERVER] Setting up message handlers..." << std::endl;
 
     // Add handlers for different message types
-    handlers_.push_back(new AuthHandler());
+    if (db_ && db_->isOpen()) {
+        handlers_.push_back(new AuthHandler(db_));
+    } else {
+        std::cerr << "[SERVER] Cannot create AuthHandler: database not available" << std::endl;
+    }
 
     // TODO: Add other handlers
     // handlers_.push_back(new MatchmakingHandler());

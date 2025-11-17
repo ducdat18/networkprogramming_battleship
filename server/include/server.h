@@ -12,6 +12,7 @@
 // Forward declarations
 class ClientConnection;
 class MessageHandler;
+class DatabaseManager;
 
 /**
  * Main server class for Battleship game
@@ -53,6 +54,9 @@ private:
     int port_;
     int server_fd_;
     std::atomic<bool> running_;
+
+    // Database
+    DatabaseManager* db_;
 
     // Client tracking
     std::map<int, std::shared_ptr<ClientConnection>> clients_;

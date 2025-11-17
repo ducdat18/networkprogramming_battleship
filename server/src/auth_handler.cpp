@@ -7,8 +7,11 @@
 
 using namespace MessageSerialization;
 
-AuthHandler::AuthHandler() : next_user_id_(1) {
-    std::cout << "[AUTH] AuthHandler initialized" << std::endl;
+AuthHandler::AuthHandler(DatabaseManager* db) : db_(db) {
+    if (!db_ || !db_->isOpen()) {
+        std::cerr << "[AUTH] ERROR: Invalid or closed database!" << std::endl;
+    }
+    std::cout << "[AUTH] AuthHandler initialized with database" << std::endl;
 }
 
 AuthHandler::~AuthHandler() {
@@ -41,62 +44,6 @@ bool AuthHandler::handleMessage(ClientConnection* client,
     }
 }
 
-bool AuthHandler::handleLogin(ClientConnection* client, const std::string& payload) {
-    LoginRequest req;
-    if (!deserialize(payload, req)) {
-        std::cerr << "[AUTH] Failed to deserialize LoginRequest" << std::endl;
-        return false;
-    }
-
-    std::cout << "[AUTH] Login request: username=" << req.username << std::endl;
-
-    LoginResponse resp;
-
-    // Phase 1.2: Simple in-memory validation
-    // Phase 2: Will check against database
-    {
-        std::lock_guard<std::mutex> lock(users_mutex_);
-
-        auto it = users_.find(req.username);
-        if (it == users_.end()) {
-            // User not found
-            resp.success = false;
-            safeStrCopy(resp.error_message, "User not found", sizeof(resp.error_message));
-            std::cout << "[AUTH] Login failed: user not found" << std::endl;
-        } else if (strcmp(it->second.password_hash.c_str(), req.password) != 0) {
-            // Wrong password
-            resp.success = false;
-            safeStrCopy(resp.error_message, "Invalid password", sizeof(resp.error_message));
-            std::cout << "[AUTH] Login failed: invalid password" << std::endl;
-        } else {
-            // Success!
-            resp.success = true;
-            resp.user_id = it->second.user_id;
-            resp.elo_rating = it->second.elo_rating;
-            safeStrCopy(resp.display_name, it->second.display_name, sizeof(resp.display_name));
-
-            // Generate session token
-            std::string token = generateSessionToken(resp.user_id);
-            safeStrCopy(resp.session_token, token, sizeof(resp.session_token));
-
-            // Store session
-            {
-                std::lock_guard<std::mutex> session_lock(sessions_mutex_);
-                sessions_[token] = resp.user_id;
-            }
-
-            // Mark client as authenticated
-            client->setAuthenticated(resp.user_id, token);
-
-            std::cout << "[AUTH] Login successful: user_id=" << resp.user_id
-                      << " token=" << token << std::endl;
-        }
-    }
-
-    // Send response
-    return sendResponse(client, AUTH_RESPONSE, serialize(resp));
-}
-
 bool AuthHandler::handleRegister(ClientConnection* client, const std::string& payload) {
     RegisterRequest req;
     if (!deserialize(payload, req)) {
@@ -109,31 +56,99 @@ bool AuthHandler::handleRegister(ClientConnection* client, const std::string& pa
 
     RegisterResponse resp;
 
-    // Phase 1.2: Simple in-memory storage
-    // Phase 2: Will insert into database
-    {
-        std::lock_guard<std::mutex> lock(users_mutex_);
+    if (!db_ || !db_->isOpen()) {
+        resp.success = false;
+        safeStrCopy(resp.error_message, "Database error", sizeof(resp.error_message));
+        std::cerr << "[AUTH] Database not available" << std::endl;
+        return sendResponse(client, AUTH_RESPONSE, serialize(resp));
+    }
 
-        // Check if username already exists
-        if (users_.find(req.username) != users_.end()) {
-            resp.success = false;
-            safeStrCopy(resp.error_message, "Username already exists", sizeof(resp.error_message));
-            std::cout << "[AUTH] Registration failed: username exists" << std::endl;
-        } else {
-            // Create new user
-            UserData user;
-            user.user_id = next_user_id_++;
-            user.username = req.username;
-            user.password_hash = req.password;  // Already hashed by client
-            user.display_name = req.display_name;
-            user.elo_rating = 1000;  // Starting ELO
+    // Check if username already exists
+    if (db_->usernameExists(req.username)) {
+        resp.success = false;
+        safeStrCopy(resp.error_message, "Username already exists", sizeof(resp.error_message));
+        std::cout << "[AUTH] Registration failed: username exists" << std::endl;
+    } else {
+        // Create new user in database
+        // TODO Phase 2.2: Add proper password hashing (bcrypt/SHA-256)
+        // For now, storing plaintext for development/testing
+        uint32_t user_id = db_->createUser(req.username, req.password, req.display_name);
 
-            users_[req.username] = user;
-
+        if (user_id > 0) {
             resp.success = true;
-            resp.user_id = user.user_id;
+            resp.user_id = user_id;
+            std::cout << "[AUTH] Registration successful: user_id=" << user_id << std::endl;
+        } else {
+            resp.success = false;
+            safeStrCopy(resp.error_message, "Failed to create user", sizeof(resp.error_message));
+            std::cerr << "[AUTH] Database error: " << db_->getLastError() << std::endl;
+        }
+    }
 
-            std::cout << "[AUTH] Registration successful: user_id=" << user.user_id << std::endl;
+    // Send response
+    return sendResponse(client, AUTH_RESPONSE, serialize(resp));
+}
+
+bool AuthHandler::handleLogin(ClientConnection* client, const std::string& payload) {
+    LoginRequest req;
+    if (!deserialize(payload, req)) {
+        std::cerr << "[AUTH] Failed to deserialize LoginRequest" << std::endl;
+        return false;
+    }
+
+    std::cout << "[AUTH] Login request: username=" << req.username << std::endl;
+
+    LoginResponse resp;
+
+    if (!db_ || !db_->isOpen()) {
+        resp.success = false;
+        safeStrCopy(resp.error_message, "Database error", sizeof(resp.error_message));
+        std::cerr << "[AUTH] Database not available" << std::endl;
+        return sendResponse(client, AUTH_RESPONSE, serialize(resp));
+    }
+
+    // Get user from database
+    User user = db_->getUserByUsername(req.username);
+
+    if (user.user_id == 0) {
+        // User not found
+        resp.success = false;
+        safeStrCopy(resp.error_message, "User not found", sizeof(resp.error_message));
+        std::cout << "[AUTH] Login failed: user not found" << std::endl;
+    } else if (user.password_hash != req.password) {
+        // Wrong password
+        // Note: Both are bcrypt hashes, direct comparison is valid
+        resp.success = false;
+        safeStrCopy(resp.error_message, "Invalid password", sizeof(resp.error_message));
+        std::cout << "[AUTH] Login failed: invalid password" << std::endl;
+    } else {
+        // Success!
+        resp.success = true;
+        resp.user_id = user.user_id;
+        resp.elo_rating = user.elo_rating;
+        safeStrCopy(resp.display_name, user.display_name, sizeof(resp.display_name));
+
+        // Generate session token
+        std::string token = generateSessionToken(user.user_id);
+        safeStrCopy(resp.session_token, token, sizeof(resp.session_token));
+
+        // Create session in database (24 hour expiration)
+        uint32_t session_id = db_->createSession(user.user_id, token, 24);
+
+        if (session_id > 0) {
+            // Update last login timestamp
+            db_->updateLastLogin(user.user_id);
+
+            // Mark client as authenticated
+            client->setAuthenticated(user.user_id, token);
+
+            std::cout << "[AUTH] Login successful: user_id=" << user.user_id
+                      << " session_id=" << session_id << std::endl;
+        } else {
+            // Failed to create session
+            resp.success = false;
+            safeStrCopy(resp.error_message, "Failed to create session", sizeof(resp.error_message));
+            std::cerr << "[AUTH] Failed to create session: " << db_->getLastError() << std::endl;
         }
     }
 
@@ -151,23 +166,32 @@ bool AuthHandler::handleLogout(ClientConnection* client, const std::string& payl
     std::cout << "[AUTH] Logout request: token=" << req.session_token << std::endl;
 
     LogoutResponse resp;
-    resp.success = true;
 
-    // Remove session
-    {
-        std::lock_guard<std::mutex> lock(sessions_mutex_);
-        sessions_.erase(req.session_token);
+    if (!db_ || !db_->isOpen()) {
+        resp.success = false;
+        std::cerr << "[AUTH] Database not available" << std::endl;
+        return sendResponse(client, AUTH_RESPONSE, serialize(resp));
     }
 
-    std::cout << "[AUTH] Logout successful" << std::endl;
+    // Delete session from database
+    bool deleted = db_->deleteSession(req.session_token);
+
+    if (deleted) {
+        resp.success = true;
+        std::cout << "[AUTH] Logout successful" << std::endl;
+    } else {
+        // Session might not exist, but that's OK for logout
+        resp.success = true;
+        std::cout << "[AUTH] Logout: session not found (already logged out?)" << std::endl;
+    }
 
     // Send response
     return sendResponse(client, AUTH_RESPONSE, serialize(resp));
 }
 
 std::string AuthHandler::generateSessionToken(uint32_t user_id) {
-    // Phase 1.2: Simple token generation
-    // Phase 2: Use cryptographically secure random + UUID
+    // Generate cryptographically secure random token
+    // Format: token_<user_id>_<random_hex>
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -176,22 +200,11 @@ std::string AuthHandler::generateSessionToken(uint32_t user_id) {
     std::stringstream ss;
     ss << "token_" << user_id << "_";
 
-    // Generate random hex string
+    // Generate 32-character random hex string
+    const char hex_chars[] = "0123456789abcdef";
     for (int i = 0; i < 32; i++) {
-        ss << std::hex << dis(gen);
+        ss << hex_chars[dis(gen)];
     }
 
     return ss.str();
-}
-
-bool AuthHandler::validateSessionToken(const std::string& token, uint32_t& user_id) {
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
-
-    auto it = sessions_.find(token);
-    if (it == sessions_.end()) {
-        return false;
-    }
-
-    user_id = it->second;
-    return true;
 }

@@ -111,6 +111,11 @@ else
     exit 1
 fi
 
+# Clean database for fresh test run
+echo -e "${YELLOW}Cleaning database for fresh test run...${NC}"
+rm -f data/battleship.db
+echo -e "${GREEN}✓ Database cleaned${NC}"
+
 # Build integration tests
 if [ "$USE_DOCKER" = true ]; then
     echo -e "${CYAN}[4/5] Building integration tests...${NC}"
