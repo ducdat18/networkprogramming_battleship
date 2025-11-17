@@ -1,5 +1,6 @@
 #include "ui_manager.h"
 #include "asset_manager.h"
+#include "session_storage.h"
 #include <cmath>
 #include <ctime>
 #include <iostream>
@@ -171,9 +172,33 @@ void UIManager::initialize(int argc, char* argv[]) {
     // IMPORTANT: Don't start animation timer yet - it will crash if boards aren't ready
     // animation_timer_id = g_timeout_add(100, animationCallback, this);
 
-    // Show login screen by default (user must authenticate first)
-    std::cout << "📋 Creating login screen..." << std::endl;
-    showScreen(SCREEN_LOGIN);
+    // Try auto-login if session exists
+    if (SessionStorage::hasStoredSession()) {
+        uint32_t user_id;
+        std::string session_token, username, display_name;
+        int32_t elo_rating;
+
+        if (SessionStorage::loadSession(user_id, session_token, username, display_name, elo_rating)) {
+            std::cout << "📋 Restoring session for: " << display_name << std::endl;
+
+            // Restore player info
+            current_player.user_id = user_id;
+            current_player.username = username;
+            current_player.display_name = display_name;
+            current_player.elo_rating = elo_rating;
+            current_player.status = STATUS_ONLINE;
+
+            // Show main menu directly
+            showScreen(SCREEN_MAIN_MENU);
+        } else {
+            std::cout << "⚠️ Failed to load session, showing login screen" << std::endl;
+            showScreen(SCREEN_LOGIN);
+        }
+    } else {
+        // Show login screen by default (user must authenticate first)
+        std::cout << "📋 Creating login screen..." << std::endl;
+        showScreen(SCREEN_LOGIN);
+    }
 
     std::cout << " Showing window..." << std::endl;
     gtk_widget_show_all(main_window);
@@ -901,10 +926,11 @@ void UIManager::handleLoginResponse(bool success, uint32_t user_id, const std::s
         uint32_t user_id;
         std::string display_name;
         int32_t elo_rating;
+        std::string session_token;
         std::string error;
     };
 
-    CallbackData* data = new CallbackData{this, success, user_id, display_name, elo_rating, error};
+    CallbackData* data = new CallbackData{this, success, user_id, display_name, elo_rating, session_token, error};
 
     g_idle_add([](gpointer user_data) -> gboolean {
         CallbackData* data = static_cast<CallbackData*>(user_data);
@@ -921,6 +947,14 @@ void UIManager::handleLoginResponse(bool success, uint32_t user_id, const std::s
             data->ui->current_player.display_name = data->display_name;
             data->ui->current_player.elo_rating = data->elo_rating;
             data->ui->current_player.status = STATUS_ONLINE;
+
+            // Save session for auto-login
+            SessionStorage::saveSession(data->user_id,
+                                       data->session_token,
+                                       data->display_name,  // Using display_name as username
+                                       data->display_name,
+                                       data->elo_rating);
+            std::cout << "[UI] Session saved for auto-login" << std::endl;
 
             // Show main menu
             data->ui->showScreen(SCREEN_MAIN_MENU);
@@ -951,6 +985,11 @@ void UIManager::handleLogoutResponse(bool success) {
 
         if (data->success) {
             std::cout << "[UI] Logout successful" << std::endl;
+
+            // Clear saved session
+            SessionStorage::clearSession();
+            std::cout << "[UI] Session cleared" << std::endl;
+
             data->ui->showScreen(SCREEN_LOGIN);
         } else {
             std::cerr << "[UI] Logout failed" << std::endl;

@@ -47,16 +47,20 @@ TEST_MATCH = $(BIN_DIR)/test_match
 TEST_AUTH_MESSAGES = $(BIN_DIR)/test_auth_messages
 TEST_NETWORK = $(BIN_DIR)/test_network
 TEST_CLIENT_NETWORK = $(BIN_DIR)/test_client_network
+TEST_SESSION_STORAGE = $(BIN_DIR)/test_session_storage
+TEST_PASSWORD_HASH = $(BIN_DIR)/test_password_hash
+TEST_DATABASE = $(BIN_DIR)/test_database
 TEST_CLIENT_SERVER = $(BIN_DIR)/test_client_server
 TEST_AUTHENTICATION = $(BIN_DIR)/test_authentication
 TEST_E2E_CLIENT_AUTH = $(BIN_DIR)/test_e2e_client_auth
+TEST_AUTO_LOGIN = $(BIN_DIR)/test_auto_login
 
 # Test flags
 GTEST_FLAGS = -lgtest -lgtest_main -lpthread
 
 # Collected test targets
-UNIT_TESTS = $(TEST_BOARD) $(TEST_MATCH) $(TEST_AUTH_MESSAGES) $(TEST_NETWORK) $(TEST_CLIENT_NETWORK)
-INTEGRATION_TESTS = $(TEST_CLIENT_SERVER) $(TEST_AUTHENTICATION) $(TEST_E2E_CLIENT_AUTH)
+UNIT_TESTS = $(TEST_BOARD) $(TEST_MATCH) $(TEST_AUTH_MESSAGES) $(TEST_NETWORK) $(TEST_CLIENT_NETWORK) $(TEST_SESSION_STORAGE) $(TEST_PASSWORD_HASH) $(TEST_DATABASE)
+INTEGRATION_TESTS = $(TEST_CLIENT_SERVER) $(TEST_AUTHENTICATION) $(TEST_E2E_CLIENT_AUTH) $(TEST_AUTO_LOGIN)
 ALL_TESTS = $(UNIT_TESTS) $(INTEGRATION_TESTS)
 
 # Targets
@@ -102,7 +106,7 @@ directories:
 # Build client
 $(CLIENT_TARGET): $(COMMON_OBJECTS) $(CLIENT_OBJECTS)
 	@echo "$(YELLOW)🔗 Linking client...$(NC)"
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(GTK_LIBS) -lpthread
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(GTK_LIBS) -lpthread -lssl -lcrypto
 	@echo "$(GREEN)✅ Client built successfully!$(NC)"
 
 # Build server
@@ -112,7 +116,7 @@ $(SERVER_TARGET): $(COMMON_OBJECTS) $(SERVER_OBJECTS)
 		echo "$(RED)⚠️  No server source files found$(NC)"; \
 		echo "$(YELLOW)Creating empty server binary...$(NC)"; \
 	fi
-	$(CXX) $(CXXFLAGS) -o $@ $^ -lpthread -lsqlite3
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lpthread -lsqlite3 -lssl -lcrypto
 	@echo "$(GREEN)✅ Server built successfully!$(NC)"
 
 # Compile common sources
@@ -137,52 +141,76 @@ $(BUILD_DIR)/server/%.o: $(SERVER_SRC)/%.cpp
 # Board tests
 $(TEST_BOARD): $(UNIT_TEST_DIR)/board/test_board.cpp $(COMMON_OBJECTS)
 	@echo "$(YELLOW)🧪 Building board tests...$(NC)"
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
 	@echo "$(GREEN)✅ Board tests built!$(NC)"
 
 # Match tests
 $(TEST_MATCH): $(UNIT_TEST_DIR)/match/test_match.cpp $(COMMON_OBJECTS)
 	@echo "$(YELLOW)🧪 Building match tests...$(NC)"
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
 	@echo "$(GREEN)✅ Match tests built!$(NC)"
 
 # Authentication message tests
 $(TEST_AUTH_MESSAGES): $(UNIT_TEST_DIR)/protocol/test_auth_messages.cpp $(COMMON_OBJECTS)
 	@echo "$(YELLOW)🧪 Building authentication message tests...$(NC)"
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
 	@echo "$(GREEN)✅ Authentication message tests built!$(NC)"
 
 # Network tests
 $(TEST_NETWORK): $(UNIT_TEST_DIR)/network/test_network.cpp $(COMMON_OBJECTS) build/server/client_connection.o
 	@echo "$(YELLOW)🧪 Building network tests...$(NC)"
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
 	@echo "$(GREEN)✅ Network tests built!$(NC)"
 
 # Client network tests
 $(TEST_CLIENT_NETWORK): $(UNIT_TEST_DIR)/client/test_client_network.cpp $(COMMON_OBJECTS) build/client/client_network.o
 	@echo "$(YELLOW)🧪 Building client network tests...$(NC)"
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
 	@echo "$(GREEN)✅ Client network tests built!$(NC)"
+
+# Session storage tests
+$(TEST_SESSION_STORAGE): $(UNIT_TEST_DIR)/client/test_session_storage.cpp $(COMMON_OBJECTS) build/client/session_storage.o
+	@echo "$(YELLOW)🧪 Building session storage tests...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
+	@echo "$(GREEN)✅ Session storage tests built!$(NC)"
+
+# Password hash tests
+$(TEST_PASSWORD_HASH): $(UNIT_TEST_DIR)/crypto/test_password_hash.cpp $(COMMON_OBJECTS)
+	@echo "$(YELLOW)🧪 Building password hash tests...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
+	@echo "$(GREEN)✅ Password hash tests built!$(NC)"
+
+# Database tests
+$(TEST_DATABASE): $(UNIT_TEST_DIR)/database/test_database.cpp $(COMMON_OBJECTS) build/server/database.o
+	@echo "$(YELLOW)🧪 Building database tests...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lsqlite3 -lssl -lcrypto
+	@echo "$(GREEN)✅ Database tests built!$(NC)"
 
 # ===== Integration Tests =====
 
 # Client-Server integration test
 $(TEST_CLIENT_SERVER): $(INTEGRATION_TEST_DIR)/test_client_server.cpp $(COMMON_OBJECTS)
 	@echo "$(YELLOW)🧪 Building client-server integration test...$(NC)"
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
 	@echo "$(GREEN)✅ Client-server test built!$(NC)"
 
 # Authentication integration test
 $(TEST_AUTHENTICATION): $(INTEGRATION_TEST_DIR)/test_authentication.cpp $(COMMON_OBJECTS)
 	@echo "$(YELLOW)🧪 Building authentication integration test...$(NC)"
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
 	@echo "$(GREEN)✅ Authentication test built!$(NC)"
 
 # E2E Client Authentication test
 $(TEST_E2E_CLIENT_AUTH): $(INTEGRATION_TEST_DIR)/test_e2e_client_auth.cpp $(COMMON_OBJECTS) build/client/client_network.o
 	@echo "$(YELLOW)🧪 Building E2E client auth test...$(NC)"
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
 	@echo "$(GREEN)✅ E2E client auth test built!$(NC)"
+
+# Auto-login integration test
+$(TEST_AUTO_LOGIN): $(INTEGRATION_TEST_DIR)/test_auto_login.cpp $(COMMON_OBJECTS) build/client/client_network.o build/client/session_storage.o
+	@echo "$(YELLOW)🧪 Building auto-login integration test...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
+	@echo "$(GREEN)✅ Auto-login integration test built!$(NC)"
 
 # ===== Build All Tests =====
 
@@ -226,6 +254,15 @@ test-unit: $(UNIT_TESTS)
 	@echo ""
 	@echo "$(YELLOW)📋 Client Network Tests$(NC)"
 	@./$(TEST_CLIENT_NETWORK)
+	@echo ""
+	@echo "$(YELLOW)📋 Session Storage Tests$(NC)"
+	@./$(TEST_SESSION_STORAGE)
+	@echo ""
+	@echo "$(YELLOW)📋 Password Hash Tests$(NC)"
+	@./$(TEST_PASSWORD_HASH)
+	@echo ""
+	@echo "$(YELLOW)📋 Database Tests$(NC)"
+	@./$(TEST_DATABASE)
 	@echo ""
 	@echo "$(GREEN)✅ All unit tests passed!$(NC)"
 

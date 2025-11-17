@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     g++ \
     pkg-config \
     libsqlite3-dev \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy source code
@@ -30,6 +31,8 @@ FROM ubuntu:22.04
 RUN apt-get update && apt-get install -y \
     libsqlite3-0 \
     sqlite3 \
+    libssl3 \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory

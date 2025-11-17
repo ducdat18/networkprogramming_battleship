@@ -1,5 +1,6 @@
 #include "auth_handler.h"
 #include "message_serialization.h"
+#include "password_hash.h"
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -69,10 +70,11 @@ bool AuthHandler::handleRegister(ClientConnection* client, const std::string& pa
         safeStrCopy(resp.error_message, "Username already exists", sizeof(resp.error_message));
         std::cout << "[AUTH] Registration failed: username exists" << std::endl;
     } else {
+        // Hash password before storing
+        std::string password_hash = PasswordHash::hashPassword(req.password);
+
         // Create new user in database
-        // TODO Phase 2.2: Add proper password hashing (bcrypt/SHA-256)
-        // For now, storing plaintext for development/testing
-        uint32_t user_id = db_->createUser(req.username, req.password, req.display_name);
+        uint32_t user_id = db_->createUser(req.username, password_hash, req.display_name);
 
         if (user_id > 0) {
             resp.success = true;
@@ -115,9 +117,8 @@ bool AuthHandler::handleLogin(ClientConnection* client, const std::string& paylo
         resp.success = false;
         safeStrCopy(resp.error_message, "User not found", sizeof(resp.error_message));
         std::cout << "[AUTH] Login failed: user not found" << std::endl;
-    } else if (user.password_hash != req.password) {
+    } else if (!PasswordHash::verifyPassword(req.password, user.password_hash)) {
         // Wrong password
-        // Note: Both are bcrypt hashes, direct comparison is valid
         resp.success = false;
         safeStrCopy(resp.error_message, "Invalid password", sizeof(resp.error_message));
         std::cout << "[AUTH] Login failed: invalid password" << std::endl;

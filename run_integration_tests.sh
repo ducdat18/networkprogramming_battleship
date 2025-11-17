@@ -49,6 +49,9 @@ cleanup() {
         fi
     fi
 
+    # Clean up WAL files
+    rm -f data/battleship.db-shm data/battleship.db-wal 2>/dev/null || true
+
     echo -e "${GREEN}Cleanup complete${NC}"
 }
 
@@ -113,8 +116,9 @@ fi
 
 # Clean database for fresh test run
 echo -e "${YELLOW}Cleaning database for fresh test run...${NC}"
-rm -f data/battleship.db
-echo -e "${GREEN}✓ Database cleaned${NC}"
+rm -f data/battleship.db data/battleship.db-shm data/battleship.db-wal
+rm -f ~/.battleship/session.txt
+echo -e "${GREEN}✓ Database and session files cleaned${NC}"
 
 # Build integration tests
 if [ "$USE_DOCKER" = true ]; then
@@ -123,7 +127,7 @@ else
     echo -e "${CYAN}[3/4] Building integration tests...${NC}"
 fi
 
-make bin/test_client_server bin/test_authentication bin/test_e2e_client_auth > /dev/null 2>&1 || {
+make bin/test_client_server bin/test_authentication bin/test_e2e_client_auth bin/test_auto_login > /dev/null 2>&1 || {
     echo -e "${RED}Error: Failed to build integration tests${NC}"
     exit 1
 }
@@ -150,9 +154,22 @@ echo ""
 # Run E2E client authentication tests (with DISABLED tests enabled)
 echo -e "${YELLOW}Running E2E client authentication tests...${NC}"
 ./bin/test_e2e_client_auth --gtest_also_run_disabled_tests
+echo ""
+
+# Run auto-login integration tests
+echo -e "${YELLOW}Running auto-login integration tests...${NC}"
+./bin/test_auto_login
+echo ""
 
 # Success
 echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  ✓ All Integration Tests Passed!${NC}"
 echo -e "${GREEN}========================================${NC}"
+echo ""
+echo -e "${CYAN}Test Summary:${NC}"
+echo -e "  • Client-Server: ✓"
+echo -e "  • Authentication: ✓"
+echo -e "  • E2E Client Auth: ✓"
+echo -e "  • Auto-Login: ✓"
+echo ""
