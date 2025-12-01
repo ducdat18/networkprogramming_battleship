@@ -5,6 +5,7 @@
 #include <thread>
 #include <chrono>
 #include "server.h"
+#include "config.h"
 
 // Global server instance for signal handling
 std::unique_ptr<Server> g_server;
@@ -21,7 +22,7 @@ void signalHandler(int signal) {
 
 int main(int argc, char* argv[]) {
     // Parse command line arguments
-    int port = DEFAULT_PORT;
+    int port = SERVER_PORT;  // Use config.h default
     if (argc > 1) {
         port = std::atoi(argv[1]);
         if (port <= 0 || port > 65535) {

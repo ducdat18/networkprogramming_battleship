@@ -21,7 +21,8 @@ AuthHandler::~AuthHandler() {
 bool AuthHandler::canHandle(MessageType type) const {
     return type == AUTH_LOGIN ||
            type == AUTH_REGISTER ||
-           type == AUTH_LOGOUT;
+           type == AUTH_LOGOUT ||
+           type == VALIDATE_SESSION;
 }
 
 bool AuthHandler::handleMessage(ClientConnection* client,
@@ -38,6 +39,9 @@ bool AuthHandler::handleMessage(ClientConnection* client,
 
         case AUTH_LOGOUT:
             return handleLogout(client, payload);
+
+        case VALIDATE_SESSION:
+            return handleValidateSession(client, payload);
 
         default:
             std::cerr << "[AUTH] Unknown message type: " << (int)header.type << std::endl;
@@ -184,6 +188,61 @@ bool AuthHandler::handleLogout(ClientConnection* client, const std::string& payl
         // Session might not exist, but that's OK for logout
         resp.success = true;
         std::cout << "[AUTH] Logout: session not found (already logged out?)" << std::endl;
+    }
+
+    // Send response
+    return sendResponse(client, AUTH_RESPONSE, serialize(resp));
+}
+
+bool AuthHandler::handleValidateSession(ClientConnection* client, const std::string& payload) {
+    SessionValidateRequest req;
+    if (!deserialize(payload, req)) {
+        std::cerr << "[AUTH] Failed to deserialize SessionValidateRequest" << std::endl;
+        return false;
+    }
+
+    std::cout << "[AUTH] Validate session request: token=" << req.session_token << std::endl;
+
+    SessionValidateResponse resp;
+
+    if (!db_ || !db_->isOpen()) {
+        resp.valid = false;
+        safeStrCopy(resp.error_message, "Database error", sizeof(resp.error_message));
+        std::cerr << "[AUTH] Database not available" << std::endl;
+        return sendResponse(client, AUTH_RESPONSE, serialize(resp));
+    }
+
+    // Validate session token
+    uint32_t user_id = db_->validateSession(req.session_token);
+
+    if (user_id == 0) {
+        // Session invalid or expired
+        resp.valid = false;
+        safeStrCopy(resp.error_message, "Session expired or invalid", sizeof(resp.error_message));
+        std::cout << "[AUTH] Session validation failed: token not found or expired" << std::endl;
+    } else {
+        // Session valid! Get user info
+        User user = db_->getUserById(user_id);
+
+        if (user.user_id == 0) {
+            // User not found (should not happen)
+            resp.valid = false;
+            safeStrCopy(resp.error_message, "User not found", sizeof(resp.error_message));
+            std::cerr << "[AUTH] User not found for valid session, user_id=" << user_id << std::endl;
+        } else {
+            // Success!
+            resp.valid = true;
+            resp.user_id = user.user_id;
+            safeStrCopy(resp.username, user.username, sizeof(resp.username));
+            safeStrCopy(resp.display_name, user.display_name, sizeof(resp.display_name));
+            resp.elo_rating = user.elo_rating;
+
+            // Mark client as authenticated
+            client->setAuthenticated(user_id, req.session_token);
+
+            std::cout << "[AUTH] Session validation successful: user_id=" << user_id
+                      << " username=" << user.username << std::endl;
+        }
     }
 
     // Send response

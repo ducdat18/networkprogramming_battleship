@@ -38,6 +38,8 @@ public:
     using LoginCallback = std::function<void(bool success, uint32_t user_id, const std::string& display_name,
                                              int32_t elo_rating, const std::string& session_token, const std::string& error)>;
     using LogoutCallback = std::function<void(bool success)>;
+    using ValidateSessionCallback = std::function<void(bool valid, uint32_t user_id, const std::string& username,
+                                                       const std::string& display_name, int32_t elo_rating, const std::string& error)>;
     using ConnectionCallback = std::function<void(bool connected, const std::string& error)>;
 
     ClientNetwork();
@@ -60,6 +62,8 @@ public:
                   LoginCallback callback);
 
     void logoutUser(LogoutCallback callback);
+
+    void validateSession(const std::string& session_token, ValidateSessionCallback callback);
 
     // Session info
     bool isAuthenticated() const { return status_ == AUTHENTICATED; }
@@ -100,6 +104,7 @@ private:
     RegisterCallback register_callback_;
     LoginCallback login_callback_;
     LogoutCallback logout_callback_;
+    ValidateSessionCallback validate_session_callback_;
     ConnectionCallback connection_callback_;
 
     // Pending request tracking
@@ -107,7 +112,8 @@ private:
         NONE,
         REGISTER,
         LOGIN,
-        LOGOUT
+        LOGOUT,
+        VALIDATE_SESSION
     };
     std::atomic<PendingRequest> pending_request_;
 };

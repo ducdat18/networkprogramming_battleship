@@ -333,6 +333,35 @@ void ClientNetwork::handleAuthResponse(const std::string& payload) {
         if (logout_callback_) {
             logout_callback_(resp.success);
         }
+
+    } else if (request == VALIDATE_SESSION) {
+        // Handle validate session response
+        SessionValidateResponse resp;
+        if (!deserialize(payload, resp)) {
+            std::cerr << "[CLIENT] Failed to deserialize SessionValidateResponse" << std::endl;
+            if (validate_session_callback_) {
+                validate_session_callback_(false, 0, "", "", 0, "Invalid response from server");
+            }
+            return;
+        }
+
+        std::cout << "[CLIENT] Validate session response: valid=" << resp.valid
+                  << " user_id=" << resp.user_id << std::endl;
+
+        if (resp.valid) {
+            // Update state
+            user_id_ = resp.user_id;
+            session_token_ = std::string(resp.username); // Store username temporarily
+            display_name_ = resp.display_name;
+            elo_rating_ = resp.elo_rating;
+            status_ = AUTHENTICATED;
+        }
+
+        if (validate_session_callback_) {
+            validate_session_callback_(resp.valid, resp.user_id, resp.username,
+                                      resp.display_name, resp.elo_rating,
+                                      resp.valid ? "" : std::string(resp.error_message));
+        }
     }
 }
 
@@ -456,6 +485,47 @@ void ClientNetwork::logoutUser(LogoutCallback callback) {
         pending_request_ = NONE;
         if (callback) {
             callback(false);
+        }
+    }
+}
+
+void ClientNetwork::validateSession(const std::string& session_token, ValidateSessionCallback callback) {
+    if (!isConnected()) {
+        std::cerr << "[CLIENT] Not connected" << std::endl;
+        if (callback) {
+            callback(false, 0, "", "", 0, "Not connected to server");
+        }
+        return;
+    }
+
+    std::cout << "[CLIENT] Validating session token" << std::endl;
+
+    // Create request
+    SessionValidateRequest req;
+    safeStrCopy(req.session_token, session_token, sizeof(req.session_token));
+
+    // Set callback
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        validate_session_callback_ = callback;
+        pending_request_ = VALIDATE_SESSION;
+    }
+
+    // Send message
+    MessageHeader header;
+    header.type = static_cast<uint8_t>(MessageType::VALIDATE_SESSION);
+    header.length = sizeof(SessionValidateRequest);
+    header.timestamp = time(nullptr);
+    memset(header.session_token, 0, sizeof(header.session_token));
+
+    std::cout << "[CLIENT] DEBUG: MessageType::VALIDATE_SESSION = " << (int)MessageType::VALIDATE_SESSION << std::endl;
+    std::cout << "[CLIENT] DEBUG: header.type before send = " << (int)header.type << std::endl;
+
+    if (!sendMessage(header, serialize(req))) {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        pending_request_ = NONE;
+        if (callback) {
+            callback(false, 0, "", "", 0, "Failed to send request");
         }
     }
 }

@@ -93,11 +93,15 @@ struct SessionValidateResponse {
     bool valid;
     uint32_t user_id;
     char username[32];
+    char display_name[64];
+    int32_t elo_rating;
+    char error_message[128];
 
     SessionValidateResponse() {
         memset(this, 0, sizeof(SessionValidateResponse));
         valid = false;
         user_id = 0;
+        elo_rating = 1000;
     }
 } __attribute__((packed));
 

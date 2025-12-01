@@ -4,7 +4,7 @@
 set -e
 
 SERVER_BIN="./bin/battleship_server"
-SERVER_PORT=8888
+SERVER_PORT=9999
 SERVER_PID=""
 USE_DOCKER=false
 
@@ -80,7 +80,7 @@ if [ "$USE_DOCKER" = true ]; then
     sleep 3
 else
     echo -e "${CYAN}[1/4] Starting server...${NC}"
-    $SERVER_BIN > /tmp/battleship_server.log 2>&1 &
+    $SERVER_BIN $SERVER_PORT > /tmp/battleship_server.log 2>&1 &
     SERVER_PID=$!
     echo "Server started (PID: $SERVER_PID)"
 

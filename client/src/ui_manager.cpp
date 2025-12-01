@@ -1,6 +1,7 @@
 #include "ui_manager.h"
 #include "asset_manager.h"
 #include "session_storage.h"
+#include "config.h"
 #include <cmath>
 #include <ctime>
 #include <iostream>
@@ -179,17 +180,66 @@ void UIManager::initialize(int argc, char* argv[]) {
         int32_t elo_rating;
 
         if (SessionStorage::loadSession(user_id, session_token, username, display_name, elo_rating)) {
-            std::cout << "📋 Restoring session for: " << display_name << std::endl;
+            std::cout << "📋 Found stored session for: " << display_name << std::endl;
+            std::cout << "🔐 Validating session with server..." << std::endl;
 
-            // Restore player info
-            current_player.user_id = user_id;
-            current_player.username = username;
-            current_player.display_name = display_name;
-            current_player.elo_rating = elo_rating;
-            current_player.status = STATUS_ONLINE;
+            // Connect to server first (use localhost for auto-login)
+            const char* host = SERVER_HOST;
+            int port = SERVER_PORT;
+            network->connect(host, port, [this, session_token](bool connected, const std::string& error) {
+                if (!connected) {
+                    std::cerr << "❌ Failed to connect: " << error << std::endl;
+                    SessionStorage::clearSession();
+                    g_idle_add([](gpointer data) -> gboolean {
+                        UIManager* ui = static_cast<UIManager*>(data);
+                        ui->showScreen(SCREEN_LOGIN);
+                        return G_SOURCE_REMOVE;
+                    }, this);
+                    return;
+                }
 
-            // Show main menu directly
-            showScreen(SCREEN_MAIN_MENU);
+                // Validate session token with server
+                network->validateSession(session_token,
+                    [this](bool valid, uint32_t user_id, const std::string& username,
+                           const std::string& display_name, int32_t elo_rating, const std::string& error) {
+
+                    g_idle_add([](gpointer data) -> gboolean {
+                        auto* params = static_cast<std::tuple<UIManager*, bool, uint32_t, std::string, std::string, int32_t, std::string>*>(data);
+                        UIManager* ui = std::get<0>(*params);
+                        bool valid = std::get<1>(*params);
+
+                        if (valid) {
+                            std::cout << "✅ Session valid! Auto-login successful" << std::endl;
+
+                            // Restore player info
+                            ui->current_player.user_id = std::get<2>(*params);
+                            ui->current_player.username = std::get<3>(*params);
+                            ui->current_player.display_name = std::get<4>(*params);
+                            ui->current_player.elo_rating = std::get<5>(*params);
+                            ui->current_player.status = STATUS_ONLINE;
+
+                            // Show main menu
+                            ui->showScreen(SCREEN_MAIN_MENU);
+                        } else {
+                            std::cerr << "❌ Session expired: " << std::get<6>(*params) << std::endl;
+
+                            // Clear expired session
+                            SessionStorage::clearSession();
+
+                            // Show login screen
+                            ui->showScreen(SCREEN_LOGIN);
+                        }
+
+                        delete params;
+                        return G_SOURCE_REMOVE;
+                    }, new std::tuple<UIManager*, bool, uint32_t, std::string, std::string, int32_t, std::string>(
+                        this, valid, user_id, username, display_name, elo_rating, error));
+                });
+            });
+
+            // Show login screen initially (will be updated after validation)
+            showScreen(SCREEN_LOGIN);
+            return;
         } else {
             std::cout << "⚠️ Failed to load session, showing login screen" << std::endl;
             showScreen(SCREEN_LOGIN);

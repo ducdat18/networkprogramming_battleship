@@ -17,6 +17,7 @@ enum MessageType {
     AUTH_LOGIN = 2,
     AUTH_LOGOUT = 3,
     AUTH_RESPONSE = 4,
+    VALIDATE_SESSION = 5,
 
     // Player management
     PLAYER_LIST_REQUEST = 10,

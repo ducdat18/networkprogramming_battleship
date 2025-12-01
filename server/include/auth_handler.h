@@ -31,6 +31,7 @@ private:
     bool handleLogin(ClientConnection* client, const std::string& payload);
     bool handleRegister(ClientConnection* client, const std::string& payload);
     bool handleLogout(ClientConnection* client, const std::string& payload);
+    bool handleValidateSession(ClientConnection* client, const std::string& payload);
 
     // Helper functions
     std::string generateSessionToken(uint32_t user_id);

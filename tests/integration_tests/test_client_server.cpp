@@ -7,12 +7,13 @@
 #include <unistd.h>
 #include <cstring>
 #include "protocol.h"
+#include "config.h"
 
 /**
  * Integration Tests - Test real client-server communication
  *
  * REQUIREMENTS:
- * - Server must be running on localhost:8888
+ * - Server must be running on localhost (port defined in config.h)
  * - Run server: ./bin/battleship_server
  *
  * These tests connect to the actual server and test real network communication
@@ -149,8 +150,8 @@ private:
 // Test fixture for integration tests
 class IntegrationTest : public ::testing::Test {
 protected:
-    static const char* SERVER_HOST;
-    static const int SERVER_PORT = 8888;
+    static const char* TEST_SERVER_HOST;
+    static const int TEST_SERVER_PORT = SERVER_PORT;  // Use config.h
 
     void SetUp() override {
         client = new TestClient();
@@ -166,22 +167,22 @@ protected:
     TestClient* client;
 };
 
-const char* IntegrationTest::SERVER_HOST = "127.0.0.1";
+const char* IntegrationTest::TEST_SERVER_HOST = "127.0.0.1";  // Same as config.h SERVER_HOST
 
 // ============== CONNECTION TESTS ==============
 
 TEST_F(IntegrationTest, ConnectToServer) {
-    bool connected = client->connect(SERVER_HOST, SERVER_PORT);
+    bool connected = client->connect(TEST_SERVER_HOST, TEST_SERVER_PORT);
 
     ASSERT_TRUE(connected)
-        << "Failed to connect to server at " << SERVER_HOST << ":" << SERVER_PORT
+        << "Failed to connect to server at " << TEST_SERVER_HOST << ":" << SERVER_PORT
         << "\nMake sure server is running: ./bin/battleship_server";
 
     EXPECT_TRUE(client->isConnected());
 }
 
 TEST_F(IntegrationTest, ConnectAndDisconnect) {
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, TEST_SERVER_PORT));
     EXPECT_TRUE(client->isConnected());
 
     client->disconnect();
@@ -192,9 +193,9 @@ TEST_F(IntegrationTest, MultipleConnections) {
     // Test multiple clients can connect simultaneously
     TestClient client1, client2, client3;
 
-    EXPECT_TRUE(client1.connect(SERVER_HOST, SERVER_PORT));
-    EXPECT_TRUE(client2.connect(SERVER_HOST, SERVER_PORT));
-    EXPECT_TRUE(client3.connect(SERVER_HOST, SERVER_PORT));
+    EXPECT_TRUE(client1.connect(TEST_SERVER_HOST, TEST_SERVER_PORT));
+    EXPECT_TRUE(client2.connect(TEST_SERVER_HOST, TEST_SERVER_PORT));
+    EXPECT_TRUE(client3.connect(TEST_SERVER_HOST, TEST_SERVER_PORT));
 
     // All should be connected
     EXPECT_TRUE(client1.isConnected());
@@ -205,7 +206,7 @@ TEST_F(IntegrationTest, MultipleConnections) {
 // ============== PING/PONG TESTS ==============
 
 TEST_F(IntegrationTest, PingPong_Single) {
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, TEST_SERVER_PORT));
 
     // Send PING
     MessageHeader ping_header;
@@ -231,7 +232,7 @@ TEST_F(IntegrationTest, PingPong_Single) {
 }
 
 TEST_F(IntegrationTest, PingPong_Multiple) {
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, TEST_SERVER_PORT));
 
     // Send 10 PINGs and verify 10 PONGs
     for (int i = 0; i < 10; i++) {
@@ -266,7 +267,7 @@ TEST_F(IntegrationTest, PingPong_Concurrent) {
         threads.emplace_back([&success_count]() {
             TestClient test_client;
 
-            if (!test_client.connect(IntegrationTest::SERVER_HOST, IntegrationTest::SERVER_PORT)) {
+            if (!test_client.connect(IntegrationTest::TEST_SERVER_HOST, IntegrationTest::TEST_SERVER_PORT)) {
                 return;
             }
 
@@ -306,7 +307,7 @@ TEST_F(IntegrationTest, PingPong_Concurrent) {
 // ============== STRESS TESTS ==============
 
 TEST_F(IntegrationTest, StressTest_RapidPingPong) {
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, TEST_SERVER_PORT));
 
     const int NUM_MESSAGES = 100;
     auto start = std::chrono::high_resolution_clock::now();
@@ -343,12 +344,12 @@ TEST_F(IntegrationTest, StressTest_RapidPingPong) {
 // ============== ERROR HANDLING TESTS ==============
 
 TEST_F(IntegrationTest, ConnectToInvalidPort) {
-    bool connected = client->connect(SERVER_HOST, 9999); // Wrong port
+    bool connected = client->connect(TEST_SERVER_HOST, 1); // Invalid port (requires root)
     EXPECT_FALSE(connected);
 }
 
 TEST_F(IntegrationTest, SendAfterDisconnect) {
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, TEST_SERVER_PORT));
     client->disconnect();
 
     MessageHeader header;
@@ -369,7 +370,7 @@ int main(int argc, char **argv) {
     std::cout << "" << std::endl;
     std::cout << "REQUIREMENTS:" << std::endl;
     std::cout << "  1. Server must be running: ./bin/battleship_server" << std::endl;
-    std::cout << "  2. Server port: 8888" << std::endl;
+    std::cout << "  2. Server port: " << SERVER_PORT << std::endl;
     std::cout << "" << std::endl;
     std::cout << "Starting tests..." << std::endl;
     std::cout << "" << std::endl;
