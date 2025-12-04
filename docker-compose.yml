@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Battleship Game Server
   server:
@@ -8,12 +6,12 @@ services:
       dockerfile: Dockerfile
     container_name: battleship_server
     ports:
-      - "8888:8888"  # Game server port
+      - "9999:9999"  # Game server port
     volumes:
       - ./data:/app/data  # Persist database
       - ./logs:/app/logs  # Server logs
     environment:
-      - SERVER_PORT=8888
+      - SERVER_PORT=9999
       - DB_PATH=/app/data/battleship.db
       - LOG_LEVEL=INFO
       - MAX_CONNECTIONS=100
@@ -37,13 +35,13 @@ services:
       dockerfile: Dockerfile
     container_name: battleship_server_dev
     ports:
-      - "8889:8888"
+      - "8889:9999"
     volumes:
       - ./:/app  # Mount entire project for development
       - ./data:/app/data
       - ./logs:/app/logs
     environment:
-      - SERVER_PORT=8888
+      - SERVER_PORT=9999
       - DB_PATH=/app/data/battleship_dev.db
       - LOG_LEVEL=DEBUG
     command: /bin/bash -c "make clean && make server && ./bin/battleship_server"

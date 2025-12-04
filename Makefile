@@ -50,17 +50,21 @@ TEST_CLIENT_NETWORK = $(BIN_DIR)/test_client_network
 TEST_SESSION_STORAGE = $(BIN_DIR)/test_session_storage
 TEST_PASSWORD_HASH = $(BIN_DIR)/test_password_hash
 TEST_DATABASE = $(BIN_DIR)/test_database
+TEST_PLAYER_MANAGER = $(BIN_DIR)/test_player_manager
+TEST_CHALLENGE_MANAGER = $(BIN_DIR)/test_challenge_manager
 TEST_CLIENT_SERVER = $(BIN_DIR)/test_client_server
 TEST_AUTHENTICATION = $(BIN_DIR)/test_authentication
 TEST_E2E_CLIENT_AUTH = $(BIN_DIR)/test_e2e_client_auth
 TEST_AUTO_LOGIN = $(BIN_DIR)/test_auto_login
+TEST_PLAYER_LIST = $(BIN_DIR)/test_player_list
+TEST_CHALLENGE = $(BIN_DIR)/test_challenge
 
 # Test flags
 GTEST_FLAGS = -lgtest -lgtest_main -lpthread
 
 # Collected test targets
-UNIT_TESTS = $(TEST_BOARD) $(TEST_MATCH) $(TEST_AUTH_MESSAGES) $(TEST_NETWORK) $(TEST_CLIENT_NETWORK) $(TEST_SESSION_STORAGE) $(TEST_PASSWORD_HASH) $(TEST_DATABASE)
-INTEGRATION_TESTS = $(TEST_CLIENT_SERVER) $(TEST_AUTHENTICATION) $(TEST_E2E_CLIENT_AUTH) $(TEST_AUTO_LOGIN)
+UNIT_TESTS = $(TEST_BOARD) $(TEST_MATCH) $(TEST_AUTH_MESSAGES) $(TEST_NETWORK) $(TEST_CLIENT_NETWORK) $(TEST_SESSION_STORAGE) $(TEST_PASSWORD_HASH) $(TEST_DATABASE) $(TEST_PLAYER_MANAGER) $(TEST_CHALLENGE_MANAGER)
+INTEGRATION_TESTS = $(TEST_CLIENT_SERVER) $(TEST_AUTHENTICATION) $(TEST_E2E_CLIENT_AUTH) $(TEST_AUTO_LOGIN) $(TEST_PLAYER_LIST) $(TEST_CHALLENGE)
 ALL_TESTS = $(UNIT_TESTS) $(INTEGRATION_TESTS)
 
 # Targets
@@ -186,6 +190,18 @@ $(TEST_DATABASE): $(UNIT_TEST_DIR)/database/test_database.cpp $(COMMON_OBJECTS) 
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lsqlite3 -lssl -lcrypto
 	@echo "$(GREEN)✅ Database tests built!$(NC)"
 
+# Test PlayerManager
+$(TEST_PLAYER_MANAGER): $(UNIT_TEST_DIR)/server/test_player_manager.cpp $(COMMON_OBJECTS) build/server/player_manager.o build/server/server.o build/server/client_connection.o build/server/database.o build/server/auth_handler.o build/server/player_handler.o
+	@echo "$(YELLOW)🧪 Building PlayerManager tests...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lsqlite3 -lssl -lcrypto
+	@echo "$(GREEN)✅ PlayerManager tests built!$(NC)"
+
+# Test ChallengeManager
+$(TEST_CHALLENGE_MANAGER): $(UNIT_TEST_DIR)/server/test_challenge_manager.cpp $(COMMON_OBJECTS) build/server/challenge_manager.o build/server/challenge_handler.o build/server/player_manager.o build/server/server.o build/server/client_connection.o build/server/database.o build/server/auth_handler.o build/server/player_handler.o
+	@echo "$(YELLOW)🧪 Building ChallengeManager tests...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lsqlite3 -lssl -lcrypto
+	@echo "$(GREEN)✅ ChallengeManager tests built!$(NC)"
+
 # ===== Integration Tests =====
 
 # Client-Server integration test
@@ -211,6 +227,18 @@ $(TEST_AUTO_LOGIN): $(INTEGRATION_TEST_DIR)/test_auto_login.cpp $(COMMON_OBJECTS
 	@echo "$(YELLOW)🧪 Building auto-login integration test...$(NC)"
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
 	@echo "$(GREEN)✅ Auto-login integration test built!$(NC)"
+
+# Player list integration test
+$(TEST_PLAYER_LIST): $(INTEGRATION_TEST_DIR)/test_player_list.cpp $(COMMON_OBJECTS)
+	@echo "$(YELLOW)🧪 Building player list integration test...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
+	@echo "$(GREEN)✅ Player list integration test built!$(NC)"
+
+# Challenge integration test
+$(TEST_CHALLENGE): $(INTEGRATION_TEST_DIR)/test_challenge.cpp $(COMMON_OBJECTS)
+	@echo "$(YELLOW)🧪 Building challenge integration test...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
+	@echo "$(GREEN)✅ Challenge integration test built!$(NC)"
 
 # ===== Build All Tests =====
 
@@ -263,6 +291,12 @@ test-unit: $(UNIT_TESTS)
 	@echo ""
 	@echo "$(YELLOW)📋 Database Tests$(NC)"
 	@./$(TEST_DATABASE)
+	@echo ""
+	@echo "$(YELLOW)📋 PlayerManager Tests$(NC)"
+	@./$(TEST_PLAYER_MANAGER)
+	@echo ""
+	@echo "$(YELLOW)📋 ChallengeManager Tests$(NC)"
+	@./$(TEST_CHALLENGE_MANAGER)
 	@echo ""
 	@echo "$(GREEN)✅ All unit tests passed!$(NC)"
 

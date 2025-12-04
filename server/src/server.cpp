@@ -2,7 +2,11 @@
 #include "client_connection.h"
 #include "message_handler.h"
 #include "auth_handler.h"
+#include "player_handler.h"
+#include "challenge_handler.h"
 #include "database.h"
+#include "player_manager.h"
+#include "challenge_manager.h"
 #include <iostream>
 #include <cstring>
 #include <thread>
@@ -16,6 +20,8 @@ Server::Server(int port)
     , server_fd_(-1)
     , running_(false)
     , db_(nullptr)
+    , player_manager_(nullptr)
+    , challenge_manager_(nullptr)
     , total_connections_(0)
     , active_matches_(0)
 {
@@ -28,6 +34,12 @@ Server::Server(int port)
     } else {
         std::cout << "[SERVER] Database initialized successfully" << std::endl;
     }
+
+    // Initialize player manager
+    player_manager_ = new PlayerManager(this);
+
+    // Initialize challenge manager
+    challenge_manager_ = new ChallengeManager(this, player_manager_);
 }
 
 Server::~Server() {
@@ -38,6 +50,18 @@ Server::~Server() {
         delete handler;
     }
     handlers_.clear();
+
+    // Cleanup challenge manager
+    if (challenge_manager_) {
+        delete challenge_manager_;
+        challenge_manager_ = nullptr;
+    }
+
+    // Cleanup player manager
+    if (player_manager_) {
+        delete player_manager_;
+        player_manager_ = nullptr;
+    }
 
     // Cleanup database
     if (db_) {
@@ -88,13 +112,25 @@ void Server::setupHandlers() {
 
     // Add handlers for different message types
     if (db_ && db_->isOpen()) {
-        handlers_.push_back(new AuthHandler(db_));
+        AuthHandler* auth_handler = new AuthHandler(db_);
+        auth_handler->setServer(this); // Set server reference for PlayerManager access
+        handlers_.push_back(auth_handler);
     } else {
         std::cerr << "[SERVER] Cannot create AuthHandler: database not available" << std::endl;
     }
 
+    // Add player handler
+    if (player_manager_) {
+        handlers_.push_back(new PlayerHandler(this, player_manager_));
+    }
+
+    // Add challenge handler
+    if (challenge_manager_) {
+        handlers_.push_back(new ChallengeHandler(this, challenge_manager_));
+    }
+
     // TODO: Add other handlers
-    // handlers_.push_back(new MatchmakingHandler());
+    // handlers_.push_back(new ChallengeHandler());
     // handlers_.push_back(new GameplayHandler());
 
     std::cout << "[SERVER] " << handlers_.size() << " handlers registered" << std::endl;
@@ -285,6 +321,25 @@ void Server::broadcastToAll(const std::string& message) {
 
     for (auto& pair : clients_) {
         // TODO: Implement broadcast
+    }
+}
+
+void Server::broadcast(const MessageHeader& header, const std::string& payload) {
+    // Copy client list to avoid holding lock during I/O
+    std::vector<std::shared_ptr<ClientConnection>> clients_copy;
+    {
+        std::lock_guard<std::mutex> lock(clients_mutex_);
+        clients_copy.reserve(clients_.size());
+        for (auto& pair : clients_) {
+            if (pair.second) {
+                clients_copy.push_back(pair.second);
+            }
+        }
+    } // Release lock before sending
+
+    // Send to all clients without holding lock (avoid blocking)
+    for (auto& client : clients_copy) {
+        client->sendMessage(header, payload);
     }
 }
 

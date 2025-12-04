@@ -13,6 +13,8 @@
 class ClientConnection;
 class MessageHandler;
 class DatabaseManager;
+class PlayerManager;
+class ChallengeManager;
 
 /**
  * Main server class for Battleship game
@@ -31,6 +33,15 @@ public:
     // Statistics
     int getConnectedClients() const;
     int getActiveMatches() const;
+
+    // Managers
+    PlayerManager* getPlayerManager() { return player_manager_; }
+    ChallengeManager* getChallengeManager() { return challenge_manager_; }
+    DatabaseManager* getDatabase() { return db_; }
+    DatabaseManager* getDatabaseManager() { return db_; }
+
+    // Broadcasting
+    void broadcast(const MessageHeader& header, const std::string& payload);
 
 private:
     // Socket operations
@@ -57,6 +68,10 @@ private:
 
     // Database
     DatabaseManager* db_;
+
+    // Managers
+    PlayerManager* player_manager_;
+    ChallengeManager* challenge_manager_;
 
     // Client tracking
     std::map<int, std::shared_ptr<ClientConnection>> clients_;

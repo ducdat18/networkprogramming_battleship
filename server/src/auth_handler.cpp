@@ -1,4 +1,6 @@
 #include "auth_handler.h"
+#include "server.h"
+#include "player_manager.h"
 #include "message_serialization.h"
 #include "password_hash.h"
 #include <iostream>
@@ -8,7 +10,7 @@
 
 using namespace MessageSerialization;
 
-AuthHandler::AuthHandler(DatabaseManager* db) : db_(db) {
+AuthHandler::AuthHandler(DatabaseManager* db) : db_(db), server_(nullptr) {
     if (!db_ || !db_->isOpen()) {
         std::cerr << "[AUTH] ERROR: Invalid or closed database!" << std::endl;
     }
@@ -157,8 +159,21 @@ bool AuthHandler::handleLogin(ClientConnection* client, const std::string& paylo
         }
     }
 
-    // Send response
-    return sendResponse(client, AUTH_RESPONSE, serialize(resp));
+    // Send response FIRST (before broadcasting)
+    bool result = sendResponse(client, AUTH_RESPONSE, serialize(resp));
+
+    // Register player with PlayerManager AFTER sending response (to avoid race condition)
+    if (resp.success && server_ && server_->getPlayerManager()) {
+        server_->getPlayerManager()->addPlayer(
+            client,
+            resp.user_id,
+            user.username,
+            user.display_name,
+            resp.elo_rating
+        );
+    }
+
+    return result;
 }
 
 bool AuthHandler::handleLogout(ClientConnection* client, const std::string& payload) {
@@ -178,15 +193,37 @@ bool AuthHandler::handleLogout(ClientConnection* client, const std::string& payl
         return sendResponse(client, AUTH_RESPONSE, serialize(resp));
     }
 
+    // Get user_id from session token (more reliable than client object)
+    uint32_t user_id = db_->validateSession(req.session_token);
+    
+    // Fallback to client object if session lookup fails
+    if (user_id == 0) {
+        user_id = client->getUserId();
+    }
+
+    std::cout << "[AUTH] Logout for user_id=" << user_id << std::endl;
+
     // Delete session from database
     bool deleted = db_->deleteSession(req.session_token);
 
     if (deleted) {
         resp.success = true;
+
+        // Remove player from PlayerManager
+        if (server_ && server_->getPlayerManager() && user_id > 0) {
+            server_->getPlayerManager()->removePlayer(user_id);
+        }
+
         std::cout << "[AUTH] Logout successful" << std::endl;
     } else {
         // Session might not exist, but that's OK for logout
         resp.success = true;
+
+        // Still remove from PlayerManager
+        if (server_ && server_->getPlayerManager() && user_id > 0) {
+            server_->getPlayerManager()->removePlayer(user_id);
+        }
+
         std::cout << "[AUTH] Logout: session not found (already logged out?)" << std::endl;
     }
 
@@ -245,8 +282,21 @@ bool AuthHandler::handleValidateSession(ClientConnection* client, const std::str
         }
     }
 
-    // Send response
-    return sendResponse(client, AUTH_RESPONSE, serialize(resp));
+    // Send response FIRST (before broadcasting)
+    bool result = sendResponse(client, AUTH_RESPONSE, serialize(resp));
+
+    // Register player with PlayerManager AFTER sending response (to avoid race condition)
+    if (resp.valid && server_ && server_->getPlayerManager()) {
+        server_->getPlayerManager()->addPlayer(
+            client,
+            resp.user_id,
+            resp.username,
+            resp.display_name,
+            resp.elo_rating
+        );
+    }
+
+    return result;
 }
 
 std::string AuthHandler::generateSessionToken(uint32_t user_id) {

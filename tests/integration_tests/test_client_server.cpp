@@ -267,7 +267,16 @@ TEST_F(IntegrationTest, PingPong_Concurrent) {
         threads.emplace_back([&success_count]() {
             TestClient test_client;
 
-            if (!test_client.connect(IntegrationTest::TEST_SERVER_HOST, IntegrationTest::TEST_SERVER_PORT)) {
+            // Retry connection a few times
+            int retries = 3;
+            while (retries-- > 0) {
+                if (test_client.connect(IntegrationTest::TEST_SERVER_HOST, IntegrationTest::TEST_SERVER_PORT)) {
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            
+            if (!test_client.isConnected()) {
                 return;
             }
 

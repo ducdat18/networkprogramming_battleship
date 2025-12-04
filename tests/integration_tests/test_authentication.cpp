@@ -10,6 +10,7 @@
 #include "protocol.h"
 #include "messages/authentication_messages.h"
 #include "message_serialization.h"
+#include "config.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -19,8 +20,7 @@
 
 using namespace MessageSerialization;
 
-const char* SERVER_HOST = "127.0.0.1";
-const int SERVER_PORT = 8888;
+const char* TEST_SERVER_HOST = "127.0.0.1";
 const int TIMEOUT_MS = 5000;
 
 // Helper class for client connection
@@ -110,6 +110,23 @@ public:
         return true;
     }
 
+    // Receive message with expected type, skip other messages (like broadcasts)
+    bool receiveExpectedMessage(MessageType expected_type, MessageHeader& header, std::string& payload) {
+        int max_attempts = 10;  // Prevent infinite loop
+        while (max_attempts-- > 0) {
+            if (!receiveMessage(header, payload)) {
+                return false;
+            }
+            if (header.type == static_cast<uint8_t>(expected_type)) {
+                return true;
+            }
+            // Skip this message and try again
+            std::cout << "[TEST] Skipping unexpected message type=" << (int)header.type 
+                      << " (waiting for type=" << (int)expected_type << ")" << std::endl;
+        }
+        return false;
+    }
+
 private:
     int socket_fd;
 };
@@ -130,12 +147,15 @@ protected:
 
 // ==================== Register Tests ====================
 
-TEST_F(AuthIntegrationTest, DISABLED_Register_Success) {
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+TEST_F(AuthIntegrationTest, Register_Success) {
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, SERVER_PORT));
+
+    // Generate unique username for this test
+    std::string username = "testuser_" + std::to_string(time(nullptr));
 
     // Create register request
     RegisterRequest req;
-    safeStrCopy(req.username, "testuser1", sizeof(req.username));
+    safeStrCopy(req.username, username.c_str(), sizeof(req.username));
     safeStrCopy(req.password, "hashed_password_123", sizeof(req.password));
     safeStrCopy(req.display_name, "Test User 1", sizeof(req.display_name));
 
@@ -159,8 +179,8 @@ TEST_F(AuthIntegrationTest, DISABLED_Register_Success) {
     EXPECT_GT(resp.user_id, 0);
 }
 
-TEST_F(AuthIntegrationTest, DISABLED_Register_DuplicateUsername) {
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+TEST_F(AuthIntegrationTest, Register_DuplicateUsername) {
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, SERVER_PORT));
 
     // First registration
     RegisterRequest req1;
@@ -180,7 +200,7 @@ TEST_F(AuthIntegrationTest, DISABLED_Register_DuplicateUsername) {
 
     // Second registration with same username
     client->disconnect();
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, SERVER_PORT));
 
     RegisterRequest req2;
     safeStrCopy(req2.username, "duplicate_user", sizeof(req2.username));
@@ -203,12 +223,15 @@ TEST_F(AuthIntegrationTest, DISABLED_Register_DuplicateUsername) {
 
 // ==================== Login Tests ====================
 
-TEST_F(AuthIntegrationTest, DISABLED_Login_Success) {
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+TEST_F(AuthIntegrationTest, Login_Success) {
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, SERVER_PORT));
+
+    // Generate unique username for this test
+    std::string username = "logintest_" + std::to_string(time(nullptr));
 
     // First register a user
     RegisterRequest reg_req;
-    safeStrCopy(reg_req.username, "logintest_user", sizeof(reg_req.username));
+    safeStrCopy(reg_req.username, username.c_str(), sizeof(reg_req.username));
     safeStrCopy(reg_req.password, "test_password_hash", sizeof(reg_req.password));
     safeStrCopy(reg_req.display_name, "Login Test User", sizeof(reg_req.display_name));
 
@@ -225,10 +248,10 @@ TEST_F(AuthIntegrationTest, DISABLED_Login_Success) {
 
     // Now login
     client->disconnect();
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, SERVER_PORT));
 
     LoginRequest login_req;
-    safeStrCopy(login_req.username, "logintest_user", sizeof(login_req.username));
+    safeStrCopy(login_req.username, username.c_str(), sizeof(login_req.username));
     safeStrCopy(login_req.password, "test_password_hash", sizeof(login_req.password));
 
     ASSERT_TRUE(client->sendMessage(AUTH_LOGIN, serialize(login_req)));
@@ -250,12 +273,15 @@ TEST_F(AuthIntegrationTest, DISABLED_Login_Success) {
     EXPECT_GT(strlen(login_resp.session_token), 0);  // Should have session token
 }
 
-TEST_F(AuthIntegrationTest, DISABLED_Login_WrongPassword) {
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+TEST_F(AuthIntegrationTest, Login_WrongPassword) {
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, SERVER_PORT));
+
+    // Generate unique username for this test
+    std::string username = "pwtest_" + std::to_string(time(nullptr));
 
     // Register user
     RegisterRequest reg_req;
-    safeStrCopy(reg_req.username, "pwtest_user", sizeof(reg_req.username));
+    safeStrCopy(reg_req.username, username.c_str(), sizeof(reg_req.username));
     safeStrCopy(reg_req.password, "correct_password", sizeof(reg_req.password));
     safeStrCopy(reg_req.display_name, "PW Test", sizeof(reg_req.display_name));
 
@@ -267,10 +293,10 @@ TEST_F(AuthIntegrationTest, DISABLED_Login_WrongPassword) {
 
     // Login with wrong password
     client->disconnect();
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, SERVER_PORT));
 
     LoginRequest login_req;
-    safeStrCopy(login_req.username, "pwtest_user", sizeof(login_req.username));
+    safeStrCopy(login_req.username, username.c_str(), sizeof(login_req.username));
     safeStrCopy(login_req.password, "wrong_password", sizeof(login_req.password));
 
     ASSERT_TRUE(client->sendMessage(AUTH_LOGIN, serialize(login_req)));
@@ -287,8 +313,8 @@ TEST_F(AuthIntegrationTest, DISABLED_Login_WrongPassword) {
     EXPECT_STREQ(login_resp.error_message, "Invalid password");
 }
 
-TEST_F(AuthIntegrationTest, DISABLED_Login_UserNotFound) {
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+TEST_F(AuthIntegrationTest, Login_UserNotFound) {
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, SERVER_PORT));
 
     LoginRequest login_req;
     safeStrCopy(login_req.username, "nonexistent_user", sizeof(login_req.username));
@@ -310,12 +336,15 @@ TEST_F(AuthIntegrationTest, DISABLED_Login_UserNotFound) {
 
 // ==================== Logout Tests ====================
 
-TEST_F(AuthIntegrationTest, DISABLED_Logout_Success) {
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+TEST_F(AuthIntegrationTest, Logout_Success) {
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, SERVER_PORT));
 
+    // Generate unique username for this test
+    std::string username = "logout_user_" + std::to_string(time(nullptr));
+    
     // Register and login first
     RegisterRequest reg_req;
-    safeStrCopy(reg_req.username, "logout_user", sizeof(reg_req.username));
+    safeStrCopy(reg_req.username, username.c_str(), sizeof(reg_req.username));
     safeStrCopy(reg_req.password, "password", sizeof(reg_req.password));
     safeStrCopy(reg_req.display_name, "Logout User", sizeof(reg_req.display_name));
 
@@ -327,17 +356,17 @@ TEST_F(AuthIntegrationTest, DISABLED_Logout_Success) {
 
     // Login
     client->disconnect();
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, SERVER_PORT));
 
     LoginRequest login_req;
-    safeStrCopy(login_req.username, "logout_user", sizeof(login_req.username));
+    safeStrCopy(login_req.username, username.c_str(), sizeof(login_req.username));
     safeStrCopy(login_req.password, "password", sizeof(login_req.password));
 
     ASSERT_TRUE(client->sendMessage(AUTH_LOGIN, serialize(login_req)));
 
     MessageHeader login_header;
     std::string login_payload;
-    ASSERT_TRUE(client->receiveMessage(login_header, login_payload));
+    ASSERT_TRUE(client->receiveExpectedMessage(AUTH_RESPONSE, login_header, login_payload));
 
     LoginResponse login_resp;
     ASSERT_TRUE(deserialize(login_payload, login_resp));
@@ -351,7 +380,7 @@ TEST_F(AuthIntegrationTest, DISABLED_Logout_Success) {
 
     MessageHeader logout_header;
     std::string logout_payload;
-    ASSERT_TRUE(client->receiveMessage(logout_header, logout_payload));
+    ASSERT_TRUE(client->receiveExpectedMessage(AUTH_RESPONSE, logout_header, logout_payload));
 
     LogoutResponse logout_resp;
     ASSERT_TRUE(deserialize(logout_payload, logout_resp));
@@ -361,14 +390,17 @@ TEST_F(AuthIntegrationTest, DISABLED_Logout_Success) {
 
 // ==================== Complete Flow Test ====================
 
-TEST_F(AuthIntegrationTest, DISABLED_CompleteAuthFlow) {
+TEST_F(AuthIntegrationTest, CompleteAuthFlow) {
     // Test complete flow: Register → Login → Logout
 
+    // Generate unique username for this test
+    std::string username = "complete_flow_" + std::to_string(time(nullptr));
+
     // 1. Register
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, SERVER_PORT));
 
     RegisterRequest reg_req;
-    safeStrCopy(reg_req.username, "complete_flow_user", sizeof(reg_req.username));
+    safeStrCopy(reg_req.username, username.c_str(), sizeof(reg_req.username));
     safeStrCopy(reg_req.password, "my_secure_password", sizeof(reg_req.password));
     safeStrCopy(reg_req.display_name, "Complete Flow User", sizeof(reg_req.display_name));
 
@@ -385,17 +417,17 @@ TEST_F(AuthIntegrationTest, DISABLED_CompleteAuthFlow) {
 
     // 2. Login
     client->disconnect();
-    ASSERT_TRUE(client->connect(SERVER_HOST, SERVER_PORT));
+    ASSERT_TRUE(client->connect(TEST_SERVER_HOST, SERVER_PORT));
 
     LoginRequest login_req;
-    safeStrCopy(login_req.username, "complete_flow_user", sizeof(login_req.username));
+    safeStrCopy(login_req.username, username.c_str(), sizeof(login_req.username));
     safeStrCopy(login_req.password, "my_secure_password", sizeof(login_req.password));
 
     ASSERT_TRUE(client->sendMessage(AUTH_LOGIN, serialize(login_req)));
 
     MessageHeader login_header;
     std::string login_payload;
-    ASSERT_TRUE(client->receiveMessage(login_header, login_payload));
+    ASSERT_TRUE(client->receiveExpectedMessage(AUTH_RESPONSE, login_header, login_payload));
 
     LoginResponse login_resp;
     ASSERT_TRUE(deserialize(login_payload, login_resp));
@@ -410,7 +442,7 @@ TEST_F(AuthIntegrationTest, DISABLED_CompleteAuthFlow) {
 
     MessageHeader logout_header;
     std::string logout_payload;
-    ASSERT_TRUE(client->receiveMessage(logout_header, logout_payload));
+    ASSERT_TRUE(client->receiveExpectedMessage(AUTH_RESPONSE, logout_header, logout_payload));
 
     LogoutResponse logout_resp;
     ASSERT_TRUE(deserialize(logout_payload, logout_resp));

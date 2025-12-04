@@ -7,6 +7,7 @@
 #include "client_network.h"
 #include "session_storage.h"
 #include "protocol.h"
+#include "config.h"
 #include <thread>
 #include <chrono>
 
@@ -51,7 +52,7 @@ protected:
 TEST_F(AutoLoginTest, CompleteAutoLoginFlow) {
     // Step 1: Connect to server
     bool conn_success = false;
-    client->connect("127.0.0.1", 8888, [&](bool success, const std::string& error) {
+    client->connect("127.0.0.1", SERVER_PORT, [&](bool success, const std::string& error) {
         conn_success = success;
         if (!success) {
             std::cout << "[ERROR] Connection failed: " << error << std::endl;
@@ -59,7 +60,7 @@ TEST_F(AutoLoginTest, CompleteAutoLoginFlow) {
     });
 
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_TRUE(conn_success) << "Failed to connect to server at 127.0.0.1:8888";
+    ASSERT_TRUE(conn_success) << "Failed to connect to server at 127.0.0.1:" << SERVER_PORT;
 
     // Step 2: Register a new user
     std::string password = "test_password_123";
@@ -184,11 +185,11 @@ TEST_F(AutoLoginTest, ClearSessionRemovesFile) {
 TEST_F(AutoLoginTest, RealServerAutoLogin) {
     // Step 1: Connect to server
     bool conn_success = false;
-    client->connect("127.0.0.1", 8888, [&](bool success, const std::string& error) {
+    client->connect("127.0.0.1", SERVER_PORT, [&](bool success, const std::string& error) {
         conn_success = success;
     });
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_TRUE(conn_success) << "Failed to connect to server. Make sure server is running on port 8888";
+    ASSERT_TRUE(conn_success) << "Failed to connect to server. Make sure server is running on port " << SERVER_PORT;
 
     // Step 2: Register
     std::string password = "secure_password_456";
@@ -208,7 +209,7 @@ TEST_F(AutoLoginTest, RealServerAutoLogin) {
 
     // Step 4: Reconnect and login
     conn_success = false;
-    client->connect("127.0.0.1", 8888, [&](bool success, const std::string& error) {
+    client->connect("127.0.0.1", SERVER_PORT, [&](bool success, const std::string& error) {
         conn_success = success;
     });
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -278,7 +279,7 @@ int main(int argc, char **argv) {
     std::cout << "║   AUTO-LOGIN INTEGRATION TESTS             ║\n";
     std::cout << "╠════════════════════════════════════════════╣\n";
     std::cout << "║  Requirements:                             ║\n";
-    std::cout << "║  - Server running on localhost:8888        ║\n";
+    std::cout << "║  - Server running on localhost:" << SERVER_PORT << "        ║\n";
     std::cout << "║  - Database initialized                    ║\n";
     std::cout << "╚════════════════════════════════════════════╝\n";
     std::cout << "\n";

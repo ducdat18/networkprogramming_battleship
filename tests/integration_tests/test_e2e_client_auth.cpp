@@ -9,14 +9,14 @@
 #include <gtest/gtest.h>
 #include "client_network.h"
 #include "message_serialization.h"
+#include "config.h"
 #include <thread>
 #include <chrono>
 #include <atomic>
 
 using namespace MessageSerialization;
 
-const char* SERVER_HOST = "127.0.0.1";
-const int SERVER_PORT = 8888;
+const char* TEST_SERVER_HOST = "127.0.0.1";
 
 class E2EClientAuthTest : public ::testing::Test {
 protected:
@@ -25,7 +25,7 @@ protected:
 
         // Connect to server
         std::atomic<bool> connected{false};
-        client->connect(SERVER_HOST, SERVER_PORT, [&](bool success, const std::string& error) {
+        client->connect(TEST_SERVER_HOST, SERVER_PORT, [&](bool success, const std::string& error) {
             connected = success;
             if (!success) {
                 std::cerr << "Connection failed: " << error << std::endl;
@@ -53,7 +53,7 @@ protected:
 
 // ==================== Complete Flow Tests ====================
 
-TEST_F(E2EClientAuthTest, DISABLED_CompleteAuthFlow_RegisterLoginLogout) {
+TEST_F(E2EClientAuthTest, CompleteAuthFlow_RegisterLoginLogout) {
     std::atomic<bool> done{false};
     std::atomic<int> step{0};  // Track progress
     uint32_t user_id = 0;
@@ -129,7 +129,7 @@ TEST_F(E2EClientAuthTest, DISABLED_CompleteAuthFlow_RegisterLoginLogout) {
     ASSERT_EQ(step, 3);
 }
 
-TEST_F(E2EClientAuthTest, DISABLED_Login_WithWrongPassword) {
+TEST_F(E2EClientAuthTest, Login_WithWrongPassword) {
     std::atomic<bool> done{false};
     bool login_success = true;  // Will be set to false
     std::string error_msg;
@@ -160,7 +160,7 @@ TEST_F(E2EClientAuthTest, DISABLED_Login_WithWrongPassword) {
     EXPECT_FALSE(client->isAuthenticated());
 }
 
-TEST_F(E2EClientAuthTest, DISABLED_Login_UserNotFound) {
+TEST_F(E2EClientAuthTest, Login_UserNotFound) {
     std::atomic<bool> done{false};
     bool login_success = true;  // Will be set to false
     std::string error_msg;
@@ -182,7 +182,7 @@ TEST_F(E2EClientAuthTest, DISABLED_Login_UserNotFound) {
     EXPECT_EQ(error_msg, "User not found");
 }
 
-TEST_F(E2EClientAuthTest, DISABLED_Register_DuplicateUsername) {
+TEST_F(E2EClientAuthTest, Register_DuplicateUsername) {
     std::atomic<int> step{0};
     std::string username = "duplicate_test_" + std::to_string(time(nullptr));
 
@@ -217,7 +217,7 @@ TEST_F(E2EClientAuthTest, DISABLED_Register_DuplicateUsername) {
     EXPECT_EQ(error_msg, "Username already exists");
 }
 
-TEST_F(E2EClientAuthTest, DISABLED_MultipleSequentialLogins) {
+TEST_F(E2EClientAuthTest, MultipleSequentialLogins) {
     // Register user
     std::string username = "multi_login_" + std::to_string(time(nullptr));
     std::atomic<int> step{0};

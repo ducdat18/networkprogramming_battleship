@@ -65,6 +65,13 @@ if [ ! -f "$SERVER_BIN" ]; then
     exit 1
 fi
 
+# Clean database BEFORE starting server for fresh test run
+echo -e "${YELLOW}Cleaning database for fresh test run...${NC}"
+rm -f data/battleship.db data/battleship.db-shm data/battleship.db-wal
+rm -f ~/.battleship/session.txt
+echo -e "${GREEN}✓ Database and session files cleaned${NC}"
+echo ""
+
 # Start server
 if [ "$USE_DOCKER" = true ]; then
     echo -e "${CYAN}[1/5] Building Docker image...${NC}"
@@ -77,7 +84,7 @@ if [ "$USE_DOCKER" = true ]; then
     echo -e "${CYAN}[2/5] Starting server in Docker...${NC}"
     docker compose up -d
     echo "Waiting for server to start..."
-    sleep 3
+    sleep 5
 else
     echo -e "${CYAN}[1/4] Starting server...${NC}"
     $SERVER_BIN $SERVER_PORT > /tmp/battleship_server.log 2>&1 &
@@ -107,18 +114,18 @@ if nc -z localhost $SERVER_PORT 2>/dev/null; then
     echo -e "${GREEN}✓ Server is listening on port $SERVER_PORT${NC}"
 else
     echo -e "${RED}✗ Server is not responding on port $SERVER_PORT${NC}"
-    if [ "$USE_DOCKER" = false ]; then
+    if [ "$USE_DOCKER" = true ]; then
+        echo "Docker container status:"
+        docker compose ps
+        echo ""
+        echo "Server logs from Docker:"
+        docker compose logs server
+    else
         echo "Server log:"
         cat /tmp/battleship_server.log
     fi
     exit 1
 fi
-
-# Clean database for fresh test run
-echo -e "${YELLOW}Cleaning database for fresh test run...${NC}"
-rm -f data/battleship.db data/battleship.db-shm data/battleship.db-wal
-rm -f ~/.battleship/session.txt
-echo -e "${GREEN}✓ Database and session files cleaned${NC}"
 
 # Build integration tests
 if [ "$USE_DOCKER" = true ]; then
@@ -127,7 +134,7 @@ else
     echo -e "${CYAN}[3/4] Building integration tests...${NC}"
 fi
 
-make bin/test_client_server bin/test_authentication bin/test_e2e_client_auth bin/test_auto_login > /dev/null 2>&1 || {
+make bin/test_client_server bin/test_authentication bin/test_e2e_client_auth bin/test_auto_login bin/test_player_list bin/test_challenge > /dev/null 2>&1 || {
     echo -e "${RED}Error: Failed to build integration tests${NC}"
     exit 1
 }
@@ -145,20 +152,35 @@ echo ""
 echo -e "${YELLOW}Running client-server tests...${NC}"
 ./bin/test_client_server
 echo ""
+sleep 0.5  # Allow server to cleanup connections
 
-# Run authentication tests (with DISABLED tests enabled)
+# Run authentication tests (only enabled tests)
 echo -e "${YELLOW}Running authentication tests...${NC}"
-./bin/test_authentication --gtest_also_run_disabled_tests
+./bin/test_authentication
 echo ""
+sleep 0.5  # Allow server to cleanup connections
 
-# Run E2E client authentication tests (with DISABLED tests enabled)
+# Run E2E client authentication tests (only enabled tests)
 echo -e "${YELLOW}Running E2E client authentication tests...${NC}"
-./bin/test_e2e_client_auth --gtest_also_run_disabled_tests
+./bin/test_e2e_client_auth
 echo ""
+sleep 0.5  # Allow server to cleanup connections
 
 # Run auto-login integration tests
 echo -e "${YELLOW}Running auto-login integration tests...${NC}"
 ./bin/test_auto_login
+echo ""
+sleep 0.5  # Allow server to cleanup connections
+
+# Run player list integration tests
+echo -e "${YELLOW}Running player list integration tests...${NC}"
+./bin/test_player_list
+echo ""
+sleep 0.5  # Allow server to cleanup connections
+
+# Run challenge integration tests
+echo -e "${YELLOW}Running challenge integration tests...${NC}"
+./bin/test_challenge
 echo ""
 
 # Success
@@ -172,4 +194,6 @@ echo -e "  • Client-Server: ✓"
 echo -e "  • Authentication: ✓"
 echo -e "  • E2E Client Auth: ✓"
 echo -e "  • Auto-Login: ✓"
+echo -e "  • Player List: ✓"
+echo -e "  • Challenge System: ✓"
 echo ""
