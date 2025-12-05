@@ -306,13 +306,29 @@ void Server::handleClient(int client_fd) {
 }
 
 void Server::removeClient(int client_fd) {
-    std::lock_guard<std::mutex> lock(clients_mutex_);
+    std::shared_ptr<ClientConnection> client;
 
-    auto it = clients_.find(client_fd);
-    if (it != clients_.end()) {
-        it->second->disconnect();
-        clients_.erase(it);
-        std::cout << "[CLEANUP] Removed client fd=" << client_fd << std::endl;
+    // Get client before removing (need to access outside lock)
+    {
+        std::lock_guard<std::mutex> lock(clients_mutex_);
+        auto it = clients_.find(client_fd);
+        if (it != clients_.end()) {
+            client = it->second;
+            clients_.erase(it);
+            std::cout << "[CLEANUP] Removed client fd=" << client_fd << std::endl;
+        }
+    }
+
+    // If client was authenticated, remove from player manager and broadcast offline status
+    if (client && client->isAuthenticated()) {
+        uint32_t user_id = client->getUserId();
+        std::cout << "[CLEANUP] Client was authenticated as user_id=" << user_id << ", broadcasting offline status" << std::endl;
+        player_manager_->removePlayer(user_id);
+    }
+
+    // Disconnect the client
+    if (client) {
+        client->disconnect();
     }
 }
 

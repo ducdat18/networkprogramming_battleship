@@ -31,4 +31,11 @@
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
 
+// ===========================================
+// Auto-Login Settings
+// ===========================================
+// Set to 1 to enable auto-login, 0 to disable
+// Disable for demo on single machine with multiple clients
+#define AUTO_LOGIN_ENABLED 0
+
 #endif // COMMON_CONFIG_H

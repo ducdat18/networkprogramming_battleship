@@ -339,10 +339,29 @@ Player List:      5 tests ✅
 - ✅ 8 unit tests for SessionStorage
 - ✅ 6 integration tests for auto-login flow
 
+**⚙️ Auto-Login Toggle Feature:**
+Auto-login có thể bật/tắt qua config để thuận tiện cho việc demo trên 1 máy với nhiều clients:
+
+```cpp
+// common/include/config.h
+#define AUTO_LOGIN_ENABLED 0  // 0 = tắt, 1 = bật
+```
+
+**Khi tắt (AUTO_LOGIN_ENABLED = 0):**
+- Mỗi client khởi động sẽ hiển thị màn hình login
+- Session không được lưu vào file
+- Phù hợp cho demo với nhiều accounts trên 1 máy
+
+**Khi bật (AUTO_LOGIN_ENABLED = 1):**
+- Session được lưu vào `~/.battleship/session.txt`
+- Lần sau mở app sẽ tự động login (nếu session hợp lệ)
+- Phù hợp cho sử dụng thực tế
+
 **Files:**
 - `client/include/session_storage.h` - Session storage header
 - `client/src/session_storage.cpp` - File-based session persistence
-- `client/src/ui_manager.cpp` - Auto-login integration
+- `client/src/ui_manager.cpp` - Auto-login integration (sử dụng `AUTO_LOGIN_ENABLED`)
+- `common/include/config.h` - Cấu hình `AUTO_LOGIN_ENABLED`
 - `tests/unit_tests/client/test_session_storage.cpp` - 8 tests
 - `tests/integration_tests/test_auto_login.cpp` - 6 integration tests
 
@@ -587,6 +606,12 @@ make test-unit
 # Run with Docker
 ./run_integration_tests.sh --docker
 
+# ⚙️ Toggle Auto-Login (cho demo trên 1 máy)
+# Mở file common/include/config.h và đổi:
+#   AUTO_LOGIN_ENABLED = 0  (tắt - mỗi client tự login)
+#   AUTO_LOGIN_ENABLED = 1  (bật - tự động login)
+# Sau đó rebuild: make clean && make all
+
 # Docker Compose commands
 docker compose build server          # Build image with OpenSSL
 docker compose up server              # Run server
@@ -615,16 +640,21 @@ rm -f ~/.battleship/session.txt
   - 2.4 Database Tests: ████████████████████ 100% ✅
   - 2.5 Session Validation: ████████████████████ 100% ✅
 
-**Phase 3 (Matchmaking)**: ██████████░░░░░░░░░░ 50% IN PROGRESS 🚀
+**Phase 3 (Matchmaking)**: ███████████████░░░░░ 75% NEARLY COMPLETE ✅
   - 3.1 Player List Server: ████████████████████ 100% ✅
-  - 3.2 Challenge System: ████████████████████ 100% ✅ ⭐ NEW
-  - 3.3 Lobby UI: ░░░░░░░░░░░░░░░░░░░░ 0% (Next)
-  - 3.4 Auto-Matchmaking: ░░░░░░░░░░░░░░░░░░░░ 0% (Bonus)
+  - 3.2 Challenge System: ████████████████████ 100% ✅
+  - 3.3 Lobby UI Integration: ████████████████████ 100% ✅ ⭐ NEW
+  - 3.4 Auto-Matchmaking: ░░░░░░░░░░░░░░░░░░░░ 0% (Bonus - Optional)
 
-**Phase 4 (Game Logic)**: ░░░░░░░░░░░░░░░░░░░░ 0% (Not started)
-**Phase 5 (Gameplay)**: ░░░░░░░░░░░░░░░░░░░░ 0% (Not started)
+**Phase 4 (Core Gameplay)**: ░░░░░░░░░░░░░░░░░░░░ 0% (Next Phase)
+  - 4.1 Ship Placement Sync: ░░░░░░░░░░░░░░░░░░░░ 0%
+  - 4.2 Turn-based Gameplay: ░░░░░░░░░░░░░░░░░░░░ 0%
+  - 4.3 Match End & Results: ░░░░░░░░░░░░░░░░░░░░ 0%
 
-**Overall Progress**: ██████████░░░░░░░░░░ 50%
+**Phase 5 (Persistence & ELO)**: ░░░░░░░░░░░░░░░░░░░░ 0% (Not started)
+**Phase 6 (Additional Features)**: ░░░░░░░░░░░░░░░░░░░░ 0% (Not started)
+
+**Overall Progress**: ████████████░░░░░░░░ 60%
 
 ---
 
@@ -640,10 +670,25 @@ rm -f ~/.battleship/session.txt
 
 **Phase 2 Estimate**: **6.5-8.5 điểm** (base + bonuses)
 
-**Phase 3 Rubric** (5 points):
-- Cung cấp danh sách người chơi: **2 điểm**
-- Chuyển lời thách đấu: **2 điểm**
-- Từ chối/Nhận thách đấu: **1 điểm**
+**Phase 3 Rubric** (5 points base + bonus):
+- ✅ Cung cấp danh sách người chơi: **2 điểm**
+  - ✅ Server: PLAYER_LIST_REQUEST/RESPONSE handlers
+  - ✅ Client: Real-time player list with status updates
+  - ✅ UI: GTK TreeView with online/offline detection
+- ✅ Chuyển lời thách đấu: **2 điểm**
+  - ✅ Server: CHALLENGE_SEND handler with routing
+  - ✅ Client: sendChallenge() API
+  - ✅ Challenge notification system
+- ✅ Từ chối/Nhận thách đấu: **1 điểm**
+  - ✅ Server: CHALLENGE_RESPONSE handler
+  - ✅ 60s timeout with auto-decline
+  - ✅ Match creation on acceptance
+- 🎁 **BONUS: Auto-matchmaking theo ELO**: **+0.5-1 điểm** (Optional)
+  - Queue management system
+  - ELO-based matching algorithm
+  - Better UX with "Find Match" button
+
+**Phase 3 Estimate**: **5 điểm** (base) + **0.5-1 điểm** (if bonus implemented)
 
 ---
 
@@ -763,38 +808,60 @@ MATCH_START = 23,              // Notify both players match is created
 
 ---
 
-### 📋 Phase 3.3: Lobby UI Integration (1-2 ngày)
+### 📋 Phase 3.3: Lobby UI Integration (COMPLETE ✅)
 
 **Client-Side Lobby UI:**
-- [ ] Display player list (GTK TreeView)
-  - Columns: Display Name, ELO Rating, Status
-  - Real-time updates when players join/leave
-  - Refresh on PLAYER_STATUS_UPDATE
+- ✅ Display player list (GTK TreeView)
+  - ✅ Columns: Display Name, ELO Rating, Status
+  - ✅ Real-time updates when players join/leave
+  - ✅ Refresh on PLAYER_STATUS_UPDATE
+  - ✅ Remove offline players from list
 
-- [ ] Challenge button
-  - Enabled when a player is selected and available
-  - Sends CHALLENGE_SEND to server
-  - Shows "Waiting for response..." status
+- ✅ Challenge button
+  - ✅ Enabled when a player is selected and available
+  - ✅ Sends CHALLENGE_SEND to server
+  - ✅ Disabled during challenge pending
 
-- [ ] Receive challenge popup (GTK Dialog)
-  - Show challenger info (name, ELO)
-  - Accept/Decline buttons
-  - 60s countdown timer
-  - Auto-close on timeout
+- ✅ Receive challenge dialog (GTK Dialog)
+  - ✅ Show challenger info (name, ELO)
+  - ✅ Accept/Decline buttons
+  - ✅ Modal dialog with proper styling
 
-- [ ] Match start transition
-  - On MATCH_CREATED, transition to ship placement screen
-  - Store match_id in UIManager
+- ✅ Match start transition
+  - ✅ On MATCH_START, transition to ship placement screen
+  - ✅ Store match_id for gameplay
+
+- ✅ Disconnect detection
+  - ✅ Server broadcasts STATUS_OFFLINE on disconnect
+  - ✅ UI removes offline players from TreeView
 
 **Client Network API:**
 ```cpp
-// Add to client_network.h
+// Added to client_network.h
 void requestPlayerList(PlayerListCallback callback);
-void sendChallenge(uint32_t target_user_id, ChallengeCallback callback);
-void respondToChallenge(uint32_t challenge_id, bool accept, ResponseCallback callback);
+void sendChallenge(uint32_t target_user_id, uint32_t time_limit, bool random_placement, SendChallengeCallback callback);
+void respondToChallenge(uint32_t challenge_id, bool accept);
+
+// Event callbacks
+void setPlayerStatusCallback(PlayerStatusCallback callback);
+void setChallengeReceivedCallback(ChallengeReceivedCallback callback);
+void setMatchStartCallback(MatchStartCallback callback);
 ```
 
-**Deliverable 3**: Players can see each other, send/receive challenges, and start matches
+**Implementation Files:**
+- `client/src/ui_lobby.cpp` - Complete lobby screen with TreeView, callbacks
+- `client/src/ui_manager.cpp` - Challenge dialog, screen management
+- `client/src/client_network.cpp` - Network API, message handlers
+- `tests/manual/test_lobby_flow.cpp` - Integration test ✅
+- `tests/manual/test_disconnect.cpp` - Disconnect detection test ✅
+
+**Bug Fixes:**
+- ✅ Fixed enum collision (PendingRequest::PLAYER_LIST shadowing MessageType::PLAYER_LIST)
+- ✅ Fixed disconnect detection (server now broadcasts offline status)
+- ✅ Fixed UI port configuration (using SERVER_PORT from config.h)
+- ✅ Fixed auto-login disable for demo purposes
+
+**Deliverable 3**: ✅ Players can see each other, send/receive challenges, start matches, and detect disconnects!
 
 ---
 
@@ -935,19 +1002,459 @@ void leaveQueue(QueueCallback callback);
   - Test end-to-end flow (send challenge → accept → match created)
   - **Deliverable**: Full challenge UI working
 
-- 📋 **Days 7-8**: Auto-matchmaking (3.4) - BONUS (Planned)
+- ✅ **Days 5-7**: Lobby UI Integration (3.3) - COMPLETE
+  - ✅ Built player list view (GTK TreeView)
+  - ✅ Built challenge dialog with Accept/Decline
+  - ✅ Integrated with server (real-time updates)
+  - ✅ Fixed disconnect detection bug
+  - ✅ Fixed enum collision bug
+  - ✅ **Deliverable**: Full challenge UI working + tested
+
+- 📋 **Days 8-9** (Optional): Auto-matchmaking (3.4) - BONUS
   - Implement queue management (join/leave)
   - Implement ELO-based matching algorithm
   - Implement background matching thread
   - Build "Find Match" UI with queue status
   - Test matchmaking with multiple clients
-  - **Deliverable**: Auto-matchmaking working
+  - **Deliverable**: Auto-matchmaking working (+0.5-1 điểm)
 
-- 📋 **Day 9**: Testing & polish (Planned)
-  - Integration tests for all flows
-  - Edge case handling (disconnect while in queue, etc.)
-  - UI polish
-  - Performance testing (many players in queue)
+---
+
+## 🎮 Phase 4: Core Gameplay Multiplayer (1.5 tuần) - 6 điểm
+
+**Status**: Not Started
+**Duration**: 10-12 ngày
+**Points**: 6 điểm (Core gameplay requirements)
+
+---
+
+### 📋 Phase 4.1: Ship Placement Sync (2-3 ngày)
+
+**Server-Side Ship Placement:**
+- [ ] `SHIP_PLACEMENT` message handler
+  - Receive ship positions from client
+  - Validate ship placement rules:
+    - All 5 ships placed (Carrier=5, Battleship=4, Cruiser=3, Submarine=3, Destroyer=2)
+    - No overlapping ships
+    - Ships within 10x10 grid
+    - Ships don't touch each other
+  - Store in `match_boards` table (board_data as JSON)
+  - Mark player as "ready"
+
+- [ ] Wait for both players ready
+  - Track ready status for both players
+  - When both ready, start match
+  - Send `MATCH_READY` to both players
+  - Set first turn (random or based on who sent challenge)
+
+- [ ] Board validation
+  - Server validates ship placement before accepting
+  - Return error if invalid placement
+  - Client can retry placement
+
+**Client-Side Ship Placement UI:**
+- [ ] Ship placement screen (GTK)
+  - 10x10 grid for player's board
+  - Drag-and-drop ships from sidebar
+  - Rotate ship button (Horizontal ↔ Vertical)
+  - Visual feedback for valid/invalid placement
+  - Show placement rules
+
+- [ ] Ship placement logic
+  - Track all 5 ships placement
+  - Validate placement rules locally (instant feedback)
+  - Enable "Ready" button when all ships placed
+  - Send SHIP_PLACEMENT to server on "Ready"
+
+- [ ] Waiting screen
+  - "Waiting for opponent to place ships..."
+  - Show countdown timer
+  - Cancel button (forfeit match)
+
+**Protocol Messages:**
+```cpp
+// Add to protocol.h
+SHIP_PLACEMENT = 30,           // Client sends ship positions
+PLACEMENT_RESULT = 31,         // Server validates placement
+MATCH_READY = 32,              // Both players ready, match starts
+```
+
+**Database:**
+```sql
+-- match_boards table already exists
+-- Store board_data as JSON:
+{
+  "ships": [
+    {"type": "CARRIER", "row": 0, "col": 0, "orientation": "HORIZONTAL"},
+    ...
+  ]
+}
+```
+
+**Deliverable 1**: ✅ Both players can place ships, server validates, match starts when both ready
+
+---
+
+### 📋 Phase 4.2: Turn-based Gameplay (3-4 ngày)
+
+**Server-Side Move Handling:**
+- [ ] `MOVE` handler
+  - Validate it's player's turn
+  - Validate coordinate is valid (0-9, not already shot)
+  - Load opponent's board from database
+  - Check if shot hits a ship
+  - Determine result: MISS, HIT, or SUNK
+  - Update board state in database
+  - Save move to `match_moves` table
+  - Check for win condition (all ships sunk)
+
+- [ ] `MOVE_RESULT` response
+  - Send result to shooter: {result, ship_type_if_sunk}
+  - Send `TURN_UPDATE` to both players
+  - If win, send `MATCH_END`
+  - Switch turn to other player
+
+- [ ] Turn timer (60s per turn)
+  - Background thread tracks turn start time
+  - If timeout, auto-forfeit current player
+  - Send `TURN_TIMEOUT` to both players
+
+- [ ] Game state synchronization
+  - Both players always have consistent game state
+  - Server is source of truth
+  - Clients only display state, don't compute
+
+**Client-Side Gameplay UI:**
+- [ ] Dual board view
+  - Left: Player's board (show own ships + opponent's shots)
+  - Right: Opponent's board (show own shots + hit/miss markers)
+  - Clear visual distinction between boards
+
+- [ ] Turn indicator
+  - "Your turn" / "Opponent's turn"
+  - Turn timer countdown (60s)
+  - Disable clicks when not your turn
+
+- [ ] Shot input
+  - Click opponent's board to shoot
+  - Confirmation dialog? (optional)
+  - Send MOVE to server
+  - Wait for MOVE_RESULT
+
+- [ ] Shot result animations
+  - Miss: Blue splash animation
+  - Hit: Red explosion animation
+  - Sunk: Show entire ship on opponent's board
+  - Sound effects (optional)
+
+- [ ] Game info panel
+  - Ships remaining (yours and opponent's)
+  - Move history (last 5 moves)
+  - Match time elapsed
+
+**Protocol Messages:**
+```cpp
+MOVE = 33,                     // Player shoots at coordinate
+MOVE_RESULT = 34,              // Result: miss/hit/sunk
+TURN_UPDATE = 35,              // Whose turn it is
+TURN_TIMEOUT = 36,             // Turn timer expired
+```
+
+**Deliverable 2**: ✅ Players can take turns shooting, see hit/miss results, game state synced
+
+---
+
+### 📋 Phase 4.3: Match End & Results (2-3 ngày)
+
+**Server-Side Match End:**
+- [ ] Win condition detection
+  - Player wins when all opponent ships are sunk
+  - Draw condition: mutual timeout/disconnect
+  - Forfeit: player disconnects or times out repeatedly
+
+- [ ] `MATCH_END` message
+  - Send to both players with result
+  - Include: winner_id, reason (win/draw/forfeit), final_stats
+
+- [ ] Save match results
+  - Update `matches` table:
+    - winner_id
+    - end_time
+    - total_moves
+    - status = 'completed'
+  - Prepare for ELO update (Phase 5)
+
+- [ ] Cleanup
+  - Remove match from active matches
+  - Set both players status back to AVAILABLE
+  - Broadcast PLAYER_STATUS_UPDATE
+
+**Client-Side Results Screen:**
+- [ ] Match end dialog
+  - Show result: "Victory!" / "Defeat" / "Draw"
+  - Display match statistics:
+    - Total moves
+    - Hit accuracy (hits / total shots)
+    - Time elapsed
+    - Ships sunk (yours and opponent's)
+
+- [ ] Action buttons
+  - "Rematch" (send REMATCH_REQUEST to opponent)
+  - "Return to Lobby"
+  - "View Replay" (Phase 5)
+
+- [ ] Results transition
+  - Smooth transition from gameplay to results
+  - Keep boards visible in results screen
+  - Celebration animation for winner
+
+**Protocol Messages:**
+```cpp
+MATCH_END = 37,                // Match finished
+MATCH_STATS = 38,              // Detailed match statistics
+```
+
+**Deliverable 3**: ✅ Match ends properly, results displayed, players return to lobby
+
+**Phase 4 Total Points**: **6 điểm**
+- Chuyển thông tin nước đi: **2 điểm** (MOVE handler + synchronization)
+- Kiểm tra tính hợp lệ: **1 điểm** (Move validation + ship placement)
+- Xác định kết quả ván cờ: **1 điểm** (Win detection + MATCH_END)
+- Ship placement sync: **2 điểm** (implied from multiplayer requirement)
+
+---
+
+## 💾 Phase 5: Persistence & ELO (1 tuần) - 6 điểm
+
+**Status**: Not Started
+**Duration**: 7-9 ngày
+**Points**: 6 điểm (Logging + ELO + Replay)
+
+---
+
+### 📋 Phase 5.1: Move Logging (1-2 ngày)
+
+**Server-Side Move Logging:**
+- [ ] Save every move to database
+  - Table: `match_moves` (match_id, player_id, move_number, row, col, result, timestamp)
+  - Save in real-time during gameplay
+  - Include complete move data for replay
+
+- [ ] Move sequence tracking
+  - Maintain move order (move_number)
+  - Track whose move it was
+  - Record exact timestamp
+
+- [ ] Match data completeness
+  - After match ends, verify all moves logged
+  - Store final board states
+  - Link to match result
+
+**Deliverable 1**: ✅ All moves logged to database with complete data
+
+**Points**: **1 điểm** (Ghi log)
+
+---
+
+### 📋 Phase 5.2: ELO Rating System (2-3 ngày)
+
+**Server-Side ELO Calculation:**
+- [ ] ELO formula implementation
+  - K-factor: 32 (standard for chess)
+  - Formula: `new_elo = old_elo + K * (actual_score - expected_score)`
+  - Expected score: `1 / (1 + 10^((opponent_elo - player_elo)/400))`
+
+- [ ] Update ratings after match
+  - Calculate for both players (winner gains, loser loses)
+  - Update `users` table (elo_rating column)
+  - Track highest ELO reached (new column: `highest_elo`)
+  - Update win/loss/draw counts
+
+- [ ] `ELO_UPDATE` message
+  - Send to both players after match
+  - Include: old_elo, new_elo, change (+/-), new_rank
+
+- [ ] ELO history tracking
+  - New table: `elo_history` (user_id, match_id, old_elo, new_elo, timestamp)
+  - Enables ELO graph over time
+
+**Client-Side ELO Display:**
+- [ ] Show ELO change in results screen
+  - "+25 ELO" (green) or "-18 ELO" (red)
+  - Progress bar to next rank
+  - Rank name (Bronze/Silver/Gold/Platinum/Diamond)
+
+- [ ] Profile screen
+  - Current ELO + rank
+  - Highest ELO reached
+  - ELO graph over last 20 matches
+  - Win/loss/draw record
+
+**Deliverable 2**: ✅ ELO ratings update after matches, displayed to players
+
+**Points**: **2 điểm** (Xây dựng hệ thống tính điểm)
+
+---
+
+### 📋 Phase 5.3: Match Replay System (2-3 ngày)
+
+**Server-Side Replay:**
+- [ ] `REPLAY_REQUEST` handler
+  - Load match data from `matches` table
+  - Load all moves from `match_moves` table (ordered by move_number)
+  - Load both players' ship placements from `match_boards`
+  - Package into REPLAY_DATA response
+
+- [ ] Replay data format
+  - Match metadata (players, result, duration)
+  - Ship positions for both players
+  - Move sequence with results
+  - Timestamps for each move
+
+**Client-Side Replay UI:**
+- [ ] Replay controls
+  - Play/Pause button
+  - Next move / Previous move
+  - Speed control (1x, 2x, 4x)
+  - Jump to move number
+
+- [ ] Replay visualization
+  - Show boards for both players
+  - Animate moves in sequence
+  - Show shot results (hit/miss/sunk)
+  - Display move timer
+
+- [ ] Replay info panel
+  - Current move number / total moves
+  - Whose turn
+  - Move history sidebar
+
+**Protocol Messages:**
+```cpp
+REPLAY_REQUEST = 50,           // Request replay for match_id
+REPLAY_DATA = 51,              // Send complete replay data
+```
+
+**Deliverable 3**: ✅ Players can watch replays of completed matches
+
+**Points**: **3 điểm** (Chuyển kết quả và log **2 điểm** + Lưu thông tin replay **1 điểm**)
+
+---
+
+## ✨ Phase 6: Additional Features & Polish (1 tuần) - 2 điểm + polish
+
+**Status**: Not Started
+**Duration**: 5-7 ngày
+**Points**: 2 điểm (Pause/Draw/Rematch)
+
+---
+
+### 📋 Phase 6.1: Match Actions (2-3 ngày)
+
+**Pause/Resume:**
+- [ ] `PAUSE_REQUEST` handler
+  - Player can request pause during their turn
+  - Send to opponent for approval
+  - If approved, pause turn timer
+  - Max pause: 5 minutes
+
+- [ ] `PAUSE_RESPONSE` handler
+  - Opponent accepts/declines pause
+  - If accepted, both clients show "Paused" state
+  - Resume button visible to both
+
+**Draw Offer:**
+- [ ] `DRAW_OFFER` handler
+  - Player can offer draw at any time
+  - Send to opponent for approval
+  - Dialog appears for opponent
+
+- [ ] `DRAW_RESPONSE` handler
+  - Accept: Match ends as draw, no ELO change
+  - Decline: Continue playing
+
+**Resign:**
+- [ ] `RESIGN` handler
+  - Player forfeits match immediately
+  - Opponent wins automatically
+  - Update ELO accordingly
+  - Return both to lobby
+
+**Rematch:**
+- [ ] `REMATCH_REQUEST` handler
+  - After match ends, player can request rematch
+  - Send to opponent
+  - 30s timeout for response
+
+- [ ] `REMATCH_RESPONSE` handler
+  - Accept: Create new match with same players
+  - Decline: Return to lobby
+  - New match starts at ship placement
+
+**Protocol Messages:**
+```cpp
+PAUSE_REQUEST = 40,
+PAUSE_RESPONSE = 41,
+DRAW_OFFER = 42,
+DRAW_RESPONSE = 43,
+RESIGN = 44,
+REMATCH_REQUEST = 45,
+REMATCH_RESPONSE = 46,
+```
+
+**Deliverable 1**: ✅ Players can pause, offer draw, resign, and request rematch
+
+**Points**: **2 điểm** (Xin ngừng/mời hòa **1 điểm** + Xin đấu lại **1 điểm**)
+
+---
+
+### 📋 Phase 6.2: Polish & Stability (2-3 ngày)
+
+**Error Handling:**
+- [ ] Graceful disconnection handling
+  - Detect client disconnect during match
+  - Auto-resign after 60s
+  - Notify opponent
+  - Update match result
+
+- [ ] Network error recovery
+  - Retry failed messages
+  - Reconnect on temporary disconnect
+  - Restore match state after reconnect
+
+- [ ] Input validation everywhere
+  - Server validates all client inputs
+  - Prevent cheating/exploits
+  - Rate limiting on requests
+
+**Performance & Memory:**
+- [ ] Memory leak checking (Valgrind)
+  - Fix any leaks in network code
+  - Fix any leaks in UI code
+  - Clean shutdown handling
+
+- [ ] Load testing
+  - 50+ concurrent players
+  - 20+ simultaneous matches
+  - Stress test matchmaking queue
+
+**UI/UX Polish:**
+- [ ] Animations and transitions
+  - Smooth screen transitions
+  - Shot result animations
+  - Loading indicators
+
+- [ ] Sound effects (optional)
+  - Shot sounds (miss vs hit)
+  - Ship sunk sound
+  - Victory/defeat sounds
+
+- [ ] Tooltips and help
+  - Hover tooltips on buttons
+  - Help dialog explaining game rules
+  - Keyboard shortcuts
+
+**Deliverable 2**: ✅ Stable, polished application ready for demo
 
 ---
 

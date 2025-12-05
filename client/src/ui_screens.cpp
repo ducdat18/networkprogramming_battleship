@@ -323,7 +323,7 @@ GtkWidget* UIManager::createMainMenuScreen() {
     g_signal_connect(btn_play_online, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
         ui->is_bot_mode = false;
-        ui->showScreen(SCREEN_LOGIN);
+        ui->showScreen(SCREEN_LOBBY);
     }), this);
 
     GtkWidget* btn_exit = gtk_button_new_with_label("EXIT");
@@ -582,129 +582,8 @@ GtkWidget* UIManager::createRegisterScreen() {
     return main_box;
 }
 
-GtkWidget* UIManager::createLobbyScreen() {
-    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-
-    // Header
-    GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
-    gtk_widget_set_size_request(header, -1, 60);
-    GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
-    gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
-    gtk_widget_set_margin_start(header, 20);
-    gtk_widget_set_margin_end(header, 20);
-
-    GtkWidget* title = gtk_label_new("NAVAL COMMAND CENTER");
-    GtkStyleContext* title_context = gtk_widget_get_style_context(title);
-    gtk_style_context_add_class(title_context, "title");
-
-    GtkWidget* user_info = gtk_label_new("Admiral_001 | ELO: 1200");
-    GtkStyleContext* user_context = gtk_widget_get_style_context(user_info);
-    gtk_style_context_add_class(user_context, "glow-text");
-
-    GtkWidget* logout_btn = gtk_button_new_with_label("LOGOUT");
-    gtk_widget_set_size_request(logout_btn, 120, 40);
-    GtkStyleContext* logout_context = gtk_widget_get_style_context(logout_btn);
-    gtk_style_context_add_class(logout_context, "danger");
-    g_signal_connect(logout_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
-        UIManager* ui = static_cast<UIManager*>(data);
-        ui->showScreen(SCREEN_LOGIN);
-    }), this);
-
-    gtk_box_pack_start(GTK_BOX(header), title, FALSE, FALSE, 0);
-    gtk_box_pack_end(GTK_BOX(header), logout_btn, FALSE, FALSE, 0);
-    gtk_box_pack_end(GTK_BOX(header), user_info, FALSE, FALSE, 0);
-
-    // Content area
-    GtkWidget* content = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
-    gtk_widget_set_margin_start(content, 20);
-    gtk_widget_set_margin_end(content, 20);
-    gtk_widget_set_margin_top(content, 20);
-    gtk_widget_set_margin_bottom(content, 20);
-
-    // Left panel - Online players
-    GtkWidget* left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    gtk_widget_set_size_request(left_panel, 500, -1);
-
-    GtkWidget* players_label = gtk_label_new("🌐 ONLINE ADMIRALS");
-    GtkStyleContext* players_context = gtk_widget_get_style_context(players_label);
-    gtk_style_context_add_class(players_context, "glow-text");
-
-    GtkWidget* players_scroll = gtk_scrolled_window_new(NULL, NULL);
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(players_scroll),
-                                   GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-    gtk_widget_set_size_request(players_scroll, -1, 600);
-
-    GtkWidget* players_list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-
-    // Sample players
-    for (int i = 1; i <= 10; i++) {
-        GtkWidget* player_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-        gtk_widget_set_margin_start(player_row, 10);
-        gtk_widget_set_margin_end(player_row, 10);
-        gtk_widget_set_margin_top(player_row, 5);
-        gtk_widget_set_margin_bottom(player_row, 5);
-
-        char player_info[128];
-        snprintf(player_info, sizeof(player_info),
-                 "Admiral_%03d | ELO: %d | WIN RATE: %d%%",
-                 100 + i, 1100 + i * 50, 50 + i * 3);
-        GtkWidget* info_label = gtk_label_new(player_info);
-
-        GtkWidget* challenge_btn = gtk_button_new_with_label("CHALLENGE");
-        gtk_widget_set_size_request(challenge_btn, 150, 35);
-        g_signal_connect(challenge_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
-            UIManager* ui = static_cast<UIManager*>(data);
-            ui->showScreen(SCREEN_SHIP_PLACEMENT);
-        }), this);
-
-        gtk_box_pack_start(GTK_BOX(player_row), info_label, TRUE, TRUE, 0);
-        gtk_box_pack_end(GTK_BOX(player_row), challenge_btn, FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(players_list), player_row, FALSE, FALSE, 0);
-    }
-
-    gtk_container_add(GTK_CONTAINER(players_scroll), players_list);
-    gtk_box_pack_start(GTK_BOX(left_panel), players_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(left_panel), players_scroll, TRUE, TRUE, 0);
-
-    // Right panel - Leaderboard
-    GtkWidget* right_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-
-    GtkWidget* leaderboard_label = gtk_label_new("TOP ADMIRALS");
-    GtkStyleContext* leaderboard_context = gtk_widget_get_style_context(leaderboard_label);
-    gtk_style_context_add_class(leaderboard_context, "glow-text");
-
-    GtkWidget* leaderboard_scroll = gtk_scrolled_window_new(NULL, NULL);
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(leaderboard_scroll),
-                                   GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-
-    GtkWidget* leaderboard_list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-
-    for (int i = 1; i <= 20; i++) {
-        char rank_info[128];
-        const char* medal = i == 1 ? "[#1]" : i == 2 ? "[#2]" : i == 3 ? "[#3]" : "";
-        snprintf(rank_info, sizeof(rank_info),
-                 "%s #%d - Admiral_%03d - ELO: %d",
-                 medal, i, i, 2000 - i * 50);
-        GtkWidget* rank_label = gtk_label_new(rank_info);
-        gtk_widget_set_margin_start(rank_label, 10);
-        gtk_widget_set_margin_top(rank_label, 3);
-        gtk_widget_set_margin_bottom(rank_label, 3);
-        gtk_box_pack_start(GTK_BOX(leaderboard_list), rank_label, FALSE, FALSE, 0);
-    }
-
-    gtk_container_add(GTK_CONTAINER(leaderboard_scroll), leaderboard_list);
-    gtk_box_pack_start(GTK_BOX(right_panel), leaderboard_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(right_panel), leaderboard_scroll, TRUE, TRUE, 0);
-
-    gtk_box_pack_start(GTK_BOX(content), left_panel, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(content), right_panel, TRUE, TRUE, 0);
-
-    gtk_box_pack_start(GTK_BOX(main_box), header, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(main_box), content, TRUE, TRUE, 0);
-
-    return main_box;
-}
-
+// Lobby screen implementation moved to ui_lobby.cpp
+// (This old implementation is kept for reference but not used)
 GtkWidget* UIManager::createShipPlacementScreen() {
     GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 

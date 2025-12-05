@@ -7,8 +7,10 @@
 #include <mutex>
 #include <atomic>
 #include <queue>
+#include <vector>
 #include "protocol.h"
 #include "messages/authentication_messages.h"
+#include "messages/matchmaking_messages.h"
 
 /**
  * Client Network Manager
@@ -42,6 +44,13 @@ public:
                                                        const std::string& display_name, int32_t elo_rating, const std::string& error)>;
     using ConnectionCallback = std::function<void(bool connected, const std::string& error)>;
 
+    // Matchmaking callbacks
+    using PlayerListCallback = std::function<void(bool success, const std::vector<PlayerInfo_Message>& players)>;
+    using PlayerStatusCallback = std::function<void(const PlayerStatusUpdate& update)>;
+    using SendChallengeCallback = std::function<void(bool success, const std::string& error)>;
+    using ChallengeReceivedCallback = std::function<void(const ChallengeReceived& challenge)>;
+    using MatchStartCallback = std::function<void(const MatchStartMessage& match)>;
+
     ClientNetwork();
     ~ClientNetwork();
 
@@ -65,6 +74,16 @@ public:
 
     void validateSession(const std::string& session_token, ValidateSessionCallback callback);
 
+    // Matchmaking API
+    void requestPlayerList(PlayerListCallback callback);
+    void sendChallenge(uint32_t target_user_id, uint32_t time_limit, bool random_placement, SendChallengeCallback callback);
+    void respondToChallenge(uint32_t challenge_id, bool accept);
+
+    // Event handlers (set these to receive notifications)
+    void setPlayerStatusCallback(PlayerStatusCallback callback);
+    void setChallengeReceivedCallback(ChallengeReceivedCallback callback);
+    void setMatchStartCallback(MatchStartCallback callback);
+
     // Session info
     bool isAuthenticated() const { return status_ == AUTHENTICATED; }
     uint32_t getUserId() const { return user_id_; }
@@ -82,6 +101,10 @@ private:
     // Message handling
     void receiveLoop();
     void handleAuthResponse(const std::string& payload);
+    void handlePlayerListResponse(const std::string& payload);
+    void handlePlayerStatusUpdate(const std::string& payload);
+    void handleChallengeReceived(const std::string& payload);
+    void handleMatchStart(const std::string& payload);
 
     // Connection state
     int socket_fd_;
@@ -107,13 +130,22 @@ private:
     ValidateSessionCallback validate_session_callback_;
     ConnectionCallback connection_callback_;
 
+    // Matchmaking callbacks
+    PlayerListCallback player_list_callback_;
+    PlayerStatusCallback player_status_callback_;
+    SendChallengeCallback send_challenge_callback_;
+    ChallengeReceivedCallback challenge_received_callback_;
+    MatchStartCallback match_start_callback_;
+
     // Pending request tracking
     enum PendingRequest {
         NONE,
         REGISTER,
         LOGIN,
         LOGOUT,
-        VALIDATE_SESSION
+        VALIDATE_SESSION,
+        PLAYER_LIST,
+        SEND_CHALLENGE
     };
     std::atomic<PendingRequest> pending_request_;
 };

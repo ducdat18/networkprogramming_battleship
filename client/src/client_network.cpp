@@ -237,11 +237,27 @@ void ClientNetwork::receiveLoop() {
         MessageType msg_type = static_cast<MessageType>(header.type);
 
         switch (msg_type) {
-            case AUTH_RESPONSE:
+            case MessageType::AUTH_RESPONSE:
                 handleAuthResponse(payload);
                 break;
 
-            case PONG:
+            case MessageType::PLAYER_LIST:
+                handlePlayerListResponse(payload);
+                break;
+
+            case MessageType::PLAYER_STATUS_UPDATE:
+                handlePlayerStatusUpdate(payload);
+                break;
+
+            case MessageType::CHALLENGE_RECEIVED:
+                handleChallengeReceived(payload);
+                break;
+
+            case MessageType::MATCH_START:
+                handleMatchStart(payload);
+                break;
+
+            case MessageType::PONG:
                 // Keepalive response
                 break;
 
@@ -527,5 +543,203 @@ void ClientNetwork::validateSession(const std::string& session_token, ValidateSe
         if (callback) {
             callback(false, 0, "", "", 0, "Failed to send request");
         }
+    }
+}
+
+// ==================== Matchmaking API ====================
+
+void ClientNetwork::requestPlayerList(PlayerListCallback callback) {
+    if (!isAuthenticated()) {
+        std::cerr << "[CLIENT] Not authenticated" << std::endl;
+        if (callback) {
+            callback(false, std::vector<PlayerInfo_Message>());
+        }
+        return;
+    }
+
+    std::cout << "[CLIENT] Requesting player list" << std::endl;
+
+    // Set callback
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        player_list_callback_ = callback;
+        pending_request_ = PLAYER_LIST;
+    }
+
+    // Send request (empty payload)
+    MessageHeader header;
+    header.type = static_cast<uint8_t>(PLAYER_LIST_REQUEST);
+    header.length = 0;
+    header.timestamp = time(nullptr);
+    safeStrCopy(header.session_token, session_token_, sizeof(header.session_token));
+
+    if (!sendMessage(header, "")) {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        pending_request_ = NONE;
+        if (callback) {
+            callback(false, std::vector<PlayerInfo_Message>());
+        }
+    }
+}
+
+void ClientNetwork::sendChallenge(uint32_t target_user_id, uint32_t time_limit, bool random_placement, SendChallengeCallback callback) {
+    if (!isAuthenticated()) {
+        std::cerr << "[CLIENT] Not authenticated" << std::endl;
+        if (callback) {
+            callback(false, "Not authenticated");
+        }
+        return;
+    }
+
+    std::cout << "[CLIENT] Sending challenge to user " << target_user_id << std::endl;
+
+    // Create challenge request
+    ChallengeRequest req;
+    req.target_user_id = target_user_id;
+    req.time_limit = time_limit;
+    req.random_placement = random_placement;
+
+    // Set callback
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        send_challenge_callback_ = callback;
+        pending_request_ = SEND_CHALLENGE;
+    }
+
+    // Send message
+    MessageHeader header;
+    header.type = static_cast<uint8_t>(CHALLENGE_SEND);
+    header.length = sizeof(ChallengeRequest);
+    header.timestamp = time(nullptr);
+    safeStrCopy(header.session_token, session_token_, sizeof(header.session_token));
+
+    if (!sendMessage(header, serialize(req))) {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        pending_request_ = NONE;
+        if (callback) {
+            callback(false, "Failed to send challenge");
+        }
+    }
+}
+
+void ClientNetwork::respondToChallenge(uint32_t challenge_id, bool accept) {
+    if (!isAuthenticated()) {
+        std::cerr << "[CLIENT] Not authenticated" << std::endl;
+        return;
+    }
+
+    std::cout << "[CLIENT] Responding to challenge " << challenge_id << " (accept=" << accept << ")" << std::endl;
+
+    // Create response
+    ChallengeResponse resp;
+    resp.challenge_id = challenge_id;
+    resp.accepted = accept;
+
+    // Send message
+    MessageHeader header;
+    header.type = static_cast<uint8_t>(CHALLENGE_RESPONSE);
+    header.length = sizeof(ChallengeResponse);
+    header.timestamp = time(nullptr);
+    safeStrCopy(header.session_token, session_token_, sizeof(header.session_token));
+
+    sendMessage(header, serialize(resp));
+}
+
+// ==================== Event Handler Setters ====================
+
+void ClientNetwork::setPlayerStatusCallback(PlayerStatusCallback callback) {
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+    player_status_callback_ = callback;
+}
+
+void ClientNetwork::setChallengeReceivedCallback(ChallengeReceivedCallback callback) {
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+    challenge_received_callback_ = callback;
+}
+
+void ClientNetwork::setMatchStartCallback(MatchStartCallback callback) {
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+    match_start_callback_ = callback;
+}
+
+// ==================== Message Handlers ====================
+
+void ClientNetwork::handlePlayerListResponse(const std::string& payload) {
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+
+    if (pending_request_ != PLAYER_LIST) {
+        std::cerr << "[CLIENT] Unexpected player list response" << std::endl;
+        return;
+    }
+
+    pending_request_ = NONE;
+
+    PlayerListResponse resp;
+    if (!deserialize(payload, resp)) {
+        std::cerr << "[CLIENT] Failed to deserialize PlayerListResponse" << std::endl;
+        if (player_list_callback_) {
+            player_list_callback_(false, std::vector<PlayerInfo_Message>());
+        }
+        return;
+    }
+
+    std::cout << "[CLIENT] Received player list with " << resp.count << " players" << std::endl;
+
+    // Convert to vector
+    std::vector<PlayerInfo_Message> players;
+    for (uint32_t i = 0; i < resp.count; i++) {
+        players.push_back(resp.players[i]);
+    }
+
+    if (player_list_callback_) {
+        player_list_callback_(true, players);
+    }
+}
+
+void ClientNetwork::handlePlayerStatusUpdate(const std::string& payload) {
+    PlayerStatusUpdate update;
+    if (!deserialize(payload, update)) {
+        std::cerr << "[CLIENT] Failed to deserialize PlayerStatusUpdate" << std::endl;
+        return;
+    }
+
+    std::cout << "[CLIENT] Player status update: user_id=" << update.user_id
+              << " status=" << update.status << std::endl;
+
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+    if (player_status_callback_) {
+        player_status_callback_(update);
+    }
+}
+
+void ClientNetwork::handleChallengeReceived(const std::string& payload) {
+    ChallengeReceived challenge;
+    if (!deserialize(payload, challenge)) {
+        std::cerr << "[CLIENT] Failed to deserialize ChallengeReceived" << std::endl;
+        return;
+    }
+
+    std::cout << "[CLIENT] Received challenge from " << challenge.challenger_name
+              << " (ID=" << challenge.challenge_id << ")" << std::endl;
+
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+    if (challenge_received_callback_) {
+        challenge_received_callback_(challenge);
+    }
+}
+
+void ClientNetwork::handleMatchStart(const std::string& payload) {
+    MatchStartMessage match;
+    if (!deserialize(payload, match)) {
+        std::cerr << "[CLIENT] Failed to deserialize MatchStartMessage" << std::endl;
+        return;
+    }
+
+    std::cout << "[CLIENT] Match started! match_id=" << match.match_id
+              << " opponent=" << match.opponent_name << std::endl;
+
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+    if (match_start_callback_) {
+        match_start_callback_(match);
     }
 }

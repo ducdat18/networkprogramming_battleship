@@ -6,6 +6,12 @@
 #include <ctime>
 #include <iostream>
 
+// Use AUTO_LOGIN_ENABLED from config.h
+// Set to 1 to enable, 0 to disable (for demo on same machine)
+#ifndef AUTO_LOGIN_ENABLED
+#define AUTO_LOGIN_ENABLED 0
+#endif
+
 #define CELL_SIZE 45
 #define CELL_PADDING 2
 #define BOARD_MARGIN 20
@@ -173,6 +179,7 @@ void UIManager::initialize(int argc, char* argv[]) {
     // IMPORTANT: Don't start animation timer yet - it will crash if boards aren't ready
     // animation_timer_id = g_timeout_add(100, animationCallback, this);
 
+#if AUTO_LOGIN_ENABLED
     // Try auto-login if session exists
     if (SessionStorage::hasStoredSession()) {
         uint32_t user_id;
@@ -249,6 +256,11 @@ void UIManager::initialize(int argc, char* argv[]) {
         std::cout << "📋 Creating login screen..." << std::endl;
         showScreen(SCREEN_LOGIN);
     }
+#else
+    // Auto-login disabled - always show login screen
+    std::cout << "📋 Auto-login disabled, showing login screen..." << std::endl;
+    showScreen(SCREEN_LOGIN);
+#endif
 
     std::cout << " Showing window..." << std::endl;
     gtk_widget_show_all(main_window);
@@ -280,7 +292,7 @@ void UIManager::initialize(int argc, char* argv[]) {
 
     // Connect to server
     std::cout << "🌐 Connecting to game server..." << std::endl;
-    connectToServer("127.0.0.1", 8888);
+    connectToServer(SERVER_HOST, SERVER_PORT);
 }
 
 void UIManager::showScreen(UIScreen screen) {
@@ -998,6 +1010,7 @@ void UIManager::handleLoginResponse(bool success, uint32_t user_id, const std::s
             data->ui->current_player.elo_rating = data->elo_rating;
             data->ui->current_player.status = STATUS_ONLINE;
 
+#if AUTO_LOGIN_ENABLED
             // Save session for auto-login
             SessionStorage::saveSession(data->user_id,
                                        data->session_token,
@@ -1005,6 +1018,9 @@ void UIManager::handleLoginResponse(bool success, uint32_t user_id, const std::s
                                        data->display_name,
                                        data->elo_rating);
             std::cout << "[UI] Session saved for auto-login" << std::endl;
+#else
+            std::cout << "[UI] Auto-login disabled, session not saved" << std::endl;
+#endif
 
             // Show main menu
             data->ui->showScreen(SCREEN_MAIN_MENU);
@@ -1036,9 +1052,13 @@ void UIManager::handleLogoutResponse(bool success) {
         if (data->success) {
             std::cout << "[UI] Logout successful" << std::endl;
 
+#if AUTO_LOGIN_ENABLED
             // Clear saved session
             SessionStorage::clearSession();
             std::cout << "[UI] Session cleared" << std::endl;
+#else
+            std::cout << "[UI] Auto-login disabled, no session to clear" << std::endl;
+#endif
 
             data->ui->showScreen(SCREEN_LOGIN);
         } else {
@@ -1072,4 +1092,76 @@ void UIManager::showInfoDialog(const std::string& title, const std::string& mess
                                              "%s", message.c_str());
     gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
+}
+
+void UIManager::showChallengeDialog(const std::string& opponent_name, int opponent_elo) {
+    // Create custom dialog
+    GtkWidget* dialog = gtk_dialog_new_with_buttons("Challenge Received!",
+                                                     GTK_WINDOW(main_window),
+                                                     GTK_DIALOG_MODAL,
+                                                     "DECLINE", GTK_RESPONSE_REJECT,
+                                                     "ACCEPT", GTK_RESPONSE_ACCEPT,
+                                                     NULL);
+
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 400, 200);
+
+    // Content area
+    GtkWidget* content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_widget_set_margin_start(content_area, 20);
+    gtk_widget_set_margin_end(content_area, 20);
+    gtk_widget_set_margin_top(content_area, 20);
+    gtk_widget_set_margin_bottom(content_area, 20);
+
+    GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 15);
+
+    // Title
+    GtkWidget* title_label = gtk_label_new("⚔️  CHALLENGE RECEIVED!");
+    PangoAttrList* attrs = pango_attr_list_new();
+    pango_attr_list_insert(attrs, pango_attr_weight_new(PANGO_WEIGHT_BOLD));
+    pango_attr_list_insert(attrs, pango_attr_scale_new(1.5));
+    gtk_label_set_attributes(GTK_LABEL(title_label), attrs);
+    pango_attr_list_unref(attrs);
+
+    // Opponent info
+    char opponent_text[256];
+    snprintf(opponent_text, sizeof(opponent_text),
+             "%s (ELO: %d) has challenged you to a battle!",
+             opponent_name.c_str(), opponent_elo);
+    GtkWidget* opponent_label = gtk_label_new(opponent_text);
+    gtk_label_set_line_wrap(GTK_LABEL(opponent_label), TRUE);
+
+    // Warning
+    GtkWidget* warning_label = gtk_label_new("Do you accept?");
+    PangoAttrList* warning_attrs = pango_attr_list_new();
+    pango_attr_list_insert(warning_attrs, pango_attr_style_new(PANGO_STYLE_ITALIC));
+    gtk_label_set_attributes(GTK_LABEL(warning_label), warning_attrs);
+    pango_attr_list_unref(warning_attrs);
+
+    gtk_box_pack_start(GTK_BOX(vbox), title_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), opponent_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), warning_label, FALSE, FALSE, 0);
+
+    gtk_container_add(GTK_CONTAINER(content_area), vbox);
+    gtk_widget_show_all(dialog);
+
+    // Run dialog and get response
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+
+    // Get challenge ID from current screen
+    uint32_t challenge_id = GPOINTER_TO_UINT(
+        g_object_get_data(G_OBJECT(current_screen), "challenge_id"));
+
+    if (challenge_id == 0) {
+        std::cerr << "[UI] Error: No challenge ID found" << std::endl;
+        return;
+    }
+
+    // Send response to server
+    bool accept = (response == GTK_RESPONSE_ACCEPT);
+    std::cout << "[UI] Challenge " << (accept ? "ACCEPTED" : "DECLINED") << std::endl;
+    network->respondToChallenge(challenge_id, accept);
+
+    // Clear challenge ID
+    g_object_set_data(G_OBJECT(current_screen), "challenge_id", GUINT_TO_POINTER(0));
 }
