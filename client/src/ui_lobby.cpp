@@ -338,17 +338,154 @@ GtkWidget* UIManager::createLobbyScreen() {
 
     network->setMatchStartCallback([this](const MatchStartMessage& match) {
         // Transition to ship placement on GTK main thread
+        struct CallbackData {
+            UIManager* ui;
+            uint32_t match_id;
+        };
+
         g_idle_add(+[](gpointer data) -> gboolean {
-            auto* match_ptr = static_cast<MatchStartMessage*>(data);
-            UIManager* ui = static_cast<UIManager*>(g_object_get_data(G_OBJECT(data), "ui"));
+            auto* cb_data = static_cast<CallbackData*>(data);
+
+            if (cb_data->ui) {
+                std::cout << "[LOBBY] 🎮 Match started! match_id=" << cb_data->match_id << " Transitioning to ship placement..." << std::endl;
+                cb_data->ui->current_match_id = cb_data->match_id;
+                cb_data->ui->waiting_for_match_ready = false;
+                cb_data->ui->showScreen(SCREEN_SHIP_PLACEMENT);
+            }
+            delete cb_data;
+            return G_SOURCE_REMOVE;
+        }, new CallbackData{this, match.match_id});
+    });
+
+    // Set up MATCH_READY callback to transition to game screen
+    network->setMatchReadyCallback([this](const MatchStateMessage& state) {
+        struct CallbackData {
+            UIManager* ui;
+            uint32_t current_turn_player_id;
+        };
+
+        g_idle_add(+[](gpointer data) -> gboolean {
+            auto* cb_data = static_cast<CallbackData*>(data);
+            std::cout << "[UI] 🎮 Both players ready! Starting match..." << std::endl;
+            cb_data->ui->is_player_turn = (cb_data->current_turn_player_id == cb_data->ui->network->getUserId());
+            cb_data->ui->showScreen(SCREEN_GAME);
+            delete cb_data;
+            return G_SOURCE_REMOVE;
+        }, new CallbackData{this, state.current_turn_player_id});
+    });
+
+    // Set up MOVE_RESULT callback to handle shot results
+    network->setMoveResultCallback([this](const MoveResultMessage& result) {
+        struct CallbackData {
+            UIManager* ui;
+            MoveResultMessage msg;
+        };
+
+        g_idle_add(+[](gpointer data) -> gboolean {
+            auto* cb_data = static_cast<CallbackData*>(data);
+            UIManager* ui = cb_data->ui;
+
+            if (ui && ui->opponent_board) {
+                std::cout << "[UI] 📍 Move result: ";
+                if (cb_data->msg.result == SHOT_MISS) {
+                    std::cout << "MISS at (" << cb_data->msg.target.row << "," << cb_data->msg.target.col << ")" << std::endl;
+                } else if (cb_data->msg.result == SHOT_HIT) {
+                    std::cout << "HIT at (" << cb_data->msg.target.row << "," << cb_data->msg.target.col << ")!" << std::endl;
+                    ui->hits_count++;
+                } else if (cb_data->msg.result == SHOT_SUNK) {
+                    std::cout << "SUNK ship at (" << cb_data->msg.target.row << "," << cb_data->msg.target.col << ")!" << std::endl;
+                    ui->hits_count++;
+                }
+
+                // Update opponent board cell
+                ui->opponent_board->processShot(cb_data->msg.target);
+
+                // Update stats display
+                ui->shots_fired++;
+                ui->updateGameStats();
+
+                // Redraw boards
+                if (ui->opponent_board_area) {
+                    gtk_widget_queue_draw(ui->opponent_board_area);
+                }
+            }
+
+            delete cb_data;
+            return G_SOURCE_REMOVE;
+        }, new CallbackData{this, result});
+    });
+
+    // Set up TURN_UPDATE callback to handle turn changes
+    network->setTurnUpdateCallback([this](const TurnUpdateMessage& turn) {
+        struct CallbackData {
+            UIManager* ui;
+            TurnUpdateMessage msg;
+        };
+
+        g_idle_add(+[](gpointer data) -> gboolean {
+            auto* cb_data = static_cast<CallbackData*>(data);
+            UIManager* ui = cb_data->ui;
 
             if (ui) {
-                std::cout << "[LOBBY] 🎮 Match started! Transitioning to ship placement..." << std::endl;
-                ui->showScreen(SCREEN_SHIP_PLACEMENT);
+                ui->is_player_turn = (cb_data->msg.current_player_id == ui->network->getUserId());
+                std::cout << "[UI] 🔄 Turn update: " << (ui->is_player_turn ? "YOUR TURN" : "OPPONENT'S TURN") << std::endl;
+
+                // Update turn indicator
+                if (ui->turn_indicator) {
+                    gtk_label_set_text(GTK_LABEL(ui->turn_indicator),
+                                      ui->is_player_turn ? "YOUR TURN" : "OPPONENT'S TURN");
+                }
+
+                // Enable/disable fire button based on turn
+                if (ui->fire_button) {
+                    gtk_widget_set_sensitive(ui->fire_button, ui->is_player_turn);
+                }
+
+                // Start turn timer
+                if (ui->is_player_turn) {
+                    ui->startTurnTimer(cb_data->msg.time_left);
+                }
             }
-            delete match_ptr;
+
+            delete cb_data;
             return G_SOURCE_REMOVE;
-        }, new MatchStartMessage(match));
+        }, new CallbackData{this, turn});
+    });
+
+    // Set up MATCH_END callback to handle game over
+    network->setMatchEndCallback([this](const MatchEndMessage& end) {
+        struct CallbackData {
+            UIManager* ui;
+            MatchEndMessage msg;
+        };
+
+        g_idle_add(+[](gpointer data) -> gboolean {
+            auto* cb_data = static_cast<CallbackData*>(data);
+            UIManager* ui = cb_data->ui;
+
+            if (ui) {
+                std::cout << "[UI] 🏁 Match ended! Winner: " << cb_data->msg.winner_id << std::endl;
+
+                // Stop turn timer
+                ui->stopTurnTimer();
+
+                // Determine result from player's perspective
+                GameResult player_result;
+                if (cb_data->msg.winner_id == 0) {
+                    player_result = RESULT_DRAW;
+                } else if (cb_data->msg.winner_id == ui->network->getUserId()) {
+                    player_result = RESULT_WIN;
+                } else {
+                    player_result = RESULT_LOSS;
+                }
+
+                // Show result dialog
+                ui->showResultDialog(player_result, cb_data->msg.elo_change);
+            }
+
+            delete cb_data;
+            return G_SOURCE_REMOVE;
+        }, new CallbackData{this, end});
     });
 
     // Auto-request player list when screen loads

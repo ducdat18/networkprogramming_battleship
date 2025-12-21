@@ -31,6 +31,7 @@ UIManager::UIManager()
       selected_target_row(-1), selected_target_col(-1), has_target_selected(false),
       fire_button(nullptr), turn_time_remaining(20), turn_timer_id(0), turn_timer_label(nullptr),
       animation_manager(nullptr), is_bot_mode(false),
+      current_match_id(0), waiting_for_match_ready(false),
       network(nullptr),
       login_username_entry(nullptr), login_password_entry(nullptr),
       register_username_entry(nullptr), register_password_entry(nullptr),
@@ -783,7 +784,19 @@ bool UIManager::executeFireAtTarget() {
     int row = selected_target_row;
     int col = selected_target_col;
 
-    // Process the shot
+    // In multiplayer mode, send move to server instead of processing locally
+    if (network && network->isConnected() && current_match_id > 0) {
+        std::cout << "[UI] Sending move to server: (" << row << "," << col << ")" << std::endl;
+        network->sendMove(current_match_id, row, col);
+
+        // Clear target selection
+        clearTargetSelection();
+
+        // The result will come back via MOVE_RESULT callback
+        return true;
+    }
+
+    // Offline/bot mode: Process the shot locally
     Coordinate target;
     target.row = row;
     target.col = col;
@@ -1092,6 +1105,49 @@ void UIManager::showInfoDialog(const std::string& title, const std::string& mess
                                              "%s", message.c_str());
     gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
+}
+
+void UIManager::showResultDialog(GameResult result, int elo_change) {
+    const char* title;
+    GtkMessageType msg_type;
+
+    switch (result) {
+        case RESULT_WIN:
+            title = "🎉 VICTORY!";
+            msg_type = GTK_MESSAGE_INFO;
+            break;
+        case RESULT_LOSS:
+            title = "💀 DEFEAT";
+            msg_type = GTK_MESSAGE_WARNING;
+            break;
+        case RESULT_DRAW:
+        default:
+            title = "⚔️ DRAW";
+            msg_type = GTK_MESSAGE_INFO;
+            break;
+    }
+
+    char message[256];
+    if (elo_change > 0) {
+        snprintf(message, sizeof(message), "ELO: +%d", elo_change);
+    } else if (elo_change < 0) {
+        snprintf(message, sizeof(message), "ELO: %d", elo_change);
+    } else {
+        snprintf(message, sizeof(message), "No ELO change");
+    }
+
+    GtkWidget* dialog = gtk_message_dialog_new(GTK_WINDOW(main_window),
+                                               GTK_DIALOG_DESTROY_WITH_PARENT,
+                                               msg_type,
+                                               GTK_BUTTONS_OK,
+                                               "%s", title);
+    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
+                                             "%s", message);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+
+    // Return to lobby after showing result
+    showScreen(SCREEN_LOBBY);
 }
 
 void UIManager::showChallengeDialog(const std::string& opponent_name, int opponent_elo) {

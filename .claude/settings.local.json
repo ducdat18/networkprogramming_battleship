@@ -22,7 +22,10 @@
       "Bash(timeout 3 ldd:*)",
       "Bash(/dev/null)",
       "Bash(make run-client:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(make server:*)",
+      "Bash(make:*)",
+      "Bash(g++:*)"
     ],
     "deny": [],
     "ask": []

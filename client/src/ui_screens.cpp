@@ -730,10 +730,35 @@ GtkWidget* UIManager::createShipPlacementScreen() {
     gtk_widget_set_size_request(ready_btn, -1, 50);
     ready_battle_button = ready_btn;  // Store reference
     gtk_widget_set_sensitive(ready_btn, FALSE);  // Disabled until all ships placed
-    g_signal_connect(ready_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+    g_signal_connect(ready_btn, "clicked", G_CALLBACK(+[](GtkButton* btn, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
         if (ui->allShipsPlaced()) {
-            ui->showScreen(SCREEN_GAME);
+            // Get ships from player board
+            const Ship* ships = ui->player_board->getShips();
+
+            // Send to server
+            ui->network->sendShipPlacement(ui->current_match_id, ships, [ui, btn](bool success, const std::string& error) {
+                if (success) {
+                    std::cout << "[UI] Ship placement accepted by server. Waiting for opponent..." << std::endl;
+                    // Update button to show waiting state
+                    g_idle_add(+[](gpointer data) -> gboolean {
+                        GtkButton* button = GTK_BUTTON(data);
+                        gtk_button_set_label(button, "⏳ WAITING FOR OPPONENT...");
+                        gtk_widget_set_sensitive(GTK_WIDGET(button), FALSE);
+                        return G_SOURCE_REMOVE;
+                    }, btn);
+                    ui->waiting_for_match_ready = true;
+                } else {
+                    std::cerr << "[UI] Ship placement failed: " << error << std::endl;
+                    // Show error dialog
+                    g_idle_add(+[](gpointer data) -> gboolean {
+                        auto* error_str = static_cast<std::string*>(data);
+                        std::cerr << "Ship placement error: " << *error_str << std::endl;
+                        delete error_str;
+                        return G_SOURCE_REMOVE;
+                    }, new std::string(error));
+                }
+            });
         }
     }), this);
 

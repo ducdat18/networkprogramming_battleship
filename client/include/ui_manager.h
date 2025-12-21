@@ -151,6 +151,10 @@ public:
     // Game mode
     bool is_bot_mode;  // true = vs Bot, false = vs Online player
 
+    // Current match info
+    uint32_t current_match_id;
+    bool waiting_for_match_ready;
+
 public:
     // Callbacks
     std::function<void(int, int)> on_cell_clicked;

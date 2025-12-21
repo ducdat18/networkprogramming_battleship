@@ -58,13 +58,14 @@ TEST_E2E_CLIENT_AUTH = $(BIN_DIR)/test_e2e_client_auth
 TEST_AUTO_LOGIN = $(BIN_DIR)/test_auto_login
 TEST_PLAYER_LIST = $(BIN_DIR)/test_player_list
 TEST_CHALLENGE = $(BIN_DIR)/test_challenge
+TEST_GAMEPLAY = $(BIN_DIR)/test_gameplay
 
 # Test flags
 GTEST_FLAGS = -lgtest -lgtest_main -lpthread
 
 # Collected test targets
 UNIT_TESTS = $(TEST_BOARD) $(TEST_MATCH) $(TEST_AUTH_MESSAGES) $(TEST_NETWORK) $(TEST_CLIENT_NETWORK) $(TEST_SESSION_STORAGE) $(TEST_PASSWORD_HASH) $(TEST_DATABASE) $(TEST_PLAYER_MANAGER) $(TEST_CHALLENGE_MANAGER)
-INTEGRATION_TESTS = $(TEST_CLIENT_SERVER) $(TEST_AUTHENTICATION) $(TEST_E2E_CLIENT_AUTH) $(TEST_AUTO_LOGIN) $(TEST_PLAYER_LIST) $(TEST_CHALLENGE)
+INTEGRATION_TESTS = $(TEST_CLIENT_SERVER) $(TEST_AUTHENTICATION) $(TEST_E2E_CLIENT_AUTH) $(TEST_AUTO_LOGIN) $(TEST_PLAYER_LIST) $(TEST_CHALLENGE) $(TEST_GAMEPLAY)
 ALL_TESTS = $(UNIT_TESTS) $(INTEGRATION_TESTS)
 
 # Targets
@@ -239,6 +240,11 @@ $(TEST_CHALLENGE): $(INTEGRATION_TEST_DIR)/test_challenge.cpp $(COMMON_OBJECTS)
 	@echo "$(YELLOW)🧪 Building challenge integration test...$(NC)"
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
 	@echo "$(GREEN)✅ Challenge integration test built!$(NC)"
+
+$(TEST_GAMEPLAY): $(INTEGRATION_TEST_DIR)/test_gameplay.cpp $(COMMON_OBJECTS)
+	@echo "$(YELLOW)🧪 Building gameplay integration test...$(NC)"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lssl -lcrypto
+	@echo "$(GREEN)✅ Gameplay integration test built!$(NC)"
 
 # ===== Build All Tests =====
 

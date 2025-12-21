@@ -4,6 +4,7 @@
 #include "auth_handler.h"
 #include "player_handler.h"
 #include "challenge_handler.h"
+#include "gameplay_handler.h"
 #include "database.h"
 #include "player_manager.h"
 #include "challenge_manager.h"
@@ -22,6 +23,7 @@ Server::Server(int port)
     , db_(nullptr)
     , player_manager_(nullptr)
     , challenge_manager_(nullptr)
+    , gameplay_handler_(nullptr)
     , total_connections_(0)
     , active_matches_(0)
 {
@@ -40,6 +42,12 @@ Server::Server(int port)
 
     // Initialize challenge manager
     challenge_manager_ = new ChallengeManager(this, player_manager_);
+
+    // Initialize gameplay handler
+    if (db_ && db_->isOpen()) {
+        gameplay_handler_ = new GameplayHandler(this, db_);
+        std::cout << "[SERVER] Gameplay handler initialized successfully" << std::endl;
+    }
 }
 
 Server::~Server() {
@@ -50,6 +58,12 @@ Server::~Server() {
         delete handler;
     }
     handlers_.clear();
+
+    // Cleanup gameplay handler
+    if (gameplay_handler_) {
+        delete gameplay_handler_;
+        gameplay_handler_ = nullptr;
+    }
 
     // Cleanup challenge manager
     if (challenge_manager_) {
@@ -129,9 +143,10 @@ void Server::setupHandlers() {
         handlers_.push_back(new ChallengeHandler(this, challenge_manager_));
     }
 
-    // TODO: Add other handlers
-    // handlers_.push_back(new ChallengeHandler());
-    // handlers_.push_back(new GameplayHandler());
+    // Add gameplay handler
+    if (gameplay_handler_) {
+        handlers_.push_back(gameplay_handler_);
+    }
 
     std::cout << "[SERVER] " << handlers_.size() << " handlers registered" << std::endl;
 }
@@ -357,6 +372,24 @@ void Server::broadcast(const MessageHeader& header, const std::string& payload) 
     for (auto& client : clients_copy) {
         client->sendMessage(header, payload);
     }
+}
+
+bool Server::sendToClient(int client_fd, const MessageHeader& header, const void* payload, size_t payload_size) {
+    std::shared_ptr<ClientConnection> client;
+    {
+        std::lock_guard<std::mutex> lock(clients_mutex_);
+        auto it = clients_.find(client_fd);
+        if (it != clients_.end()) {
+            client = it->second;
+        }
+    }
+
+    if (client) {
+        std::string payload_str(reinterpret_cast<const char*>(payload), payload_size);
+        return client->sendMessage(header, payload_str);
+    }
+
+    return false;
 }
 
 int Server::getConnectedClients() const {
