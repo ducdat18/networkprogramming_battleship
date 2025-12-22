@@ -347,12 +347,8 @@ void Server::removeClient(int client_fd) {
     }
 }
 
-void Server::broadcastToAll(const std::string& message) {
-    std::lock_guard<std::mutex> lock(clients_mutex_);
-
-    for (auto& pair : clients_) {
-        // TODO: Implement broadcast
-    }
+void Server::broadcastToAll(const std::string& /*message*/) {
+    // Deprecated helper - use broadcast(const MessageHeader&, const std::string&) instead.
 }
 
 void Server::broadcast(const MessageHeader& header, const std::string& payload) {
@@ -368,10 +364,18 @@ void Server::broadcast(const MessageHeader& header, const std::string& payload) 
         }
     } // Release lock before sending
 
+    std::cout << "[SERVER] Broadcasting message type=" << (int)header.type 
+              << " to " << clients_copy.size() << " clients" << std::endl;
+
     // Send to all clients without holding lock (avoid blocking)
+    int sent_count = 0;
     for (auto& client : clients_copy) {
-        client->sendMessage(header, payload);
+        if (client && client->sendMessage(header, payload)) {
+            sent_count++;
+        }
     }
+    
+    std::cout << "[SERVER] Broadcast sent to " << sent_count << "/" << clients_copy.size() << " clients" << std::endl;
 }
 
 bool Server::sendToClient(int client_fd, const MessageHeader& header, const void* payload, size_t payload_size) {

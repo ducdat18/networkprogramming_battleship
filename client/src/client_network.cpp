@@ -901,12 +901,17 @@ void ClientNetwork::handlePlayerStatusUpdate(const std::string& payload) {
         return;
     }
 
-    std::cout << "[CLIENT] Player status update: user_id=" << update.user_id
-              << " status=" << update.status << std::endl;
+    std::cout << "[CLIENT] ✅ Player status update received: " << update.display_name
+              << " (ID: " << update.user_id 
+              << ", Status: " << (int)update.status 
+              << ", ELO: " << update.elo_rating << ")" << std::endl;
 
     std::lock_guard<std::mutex> lock(callback_mutex_);
     if (player_status_callback_) {
+        std::cout << "[CLIENT] Calling player_status_callback_" << std::endl;
         player_status_callback_(update);
+    } else {
+        std::cerr << "[CLIENT] WARNING: player_status_callback_ is not set!" << std::endl;
     }
 }
 

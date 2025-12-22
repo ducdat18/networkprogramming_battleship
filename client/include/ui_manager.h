@@ -154,6 +154,8 @@ public:
     // Current match info
     uint32_t current_match_id;
     bool waiting_for_match_ready;
+    // Pending challenge (when dialog is shown while current_screen might be null)
+    uint32_t pending_challenge_id_;
 
 public:
     // Callbacks

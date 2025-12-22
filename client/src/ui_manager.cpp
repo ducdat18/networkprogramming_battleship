@@ -32,6 +32,7 @@ UIManager::UIManager()
       fire_button(nullptr), turn_time_remaining(20), turn_timer_id(0), turn_timer_label(nullptr),
       animation_manager(nullptr), is_bot_mode(false),
       current_match_id(0), waiting_for_match_ready(false),
+      pending_challenge_id_(0),
       network(nullptr),
       login_username_entry(nullptr), login_password_entry(nullptr),
       register_username_entry(nullptr), register_password_entry(nullptr),
@@ -787,12 +788,19 @@ bool UIManager::executeFireAtTarget() {
     // In multiplayer mode, send move to server instead of processing locally
     if (network && network->isConnected() && current_match_id > 0) {
         std::cout << "[UI] Sending move to server: (" << row << "," << col << ")" << std::endl;
+        
+        // Disable fire button immediately to prevent multiple shots
+        if (fire_button) {
+            gtk_widget_set_sensitive(fire_button, FALSE);
+        }
+        
         network->sendMove(current_match_id, row, col);
 
         // Clear target selection
         clearTargetSelection();
 
         // The result will come back via MOVE_RESULT callback
+        // Fire button will be re-enabled by MOVE_RESULT (if HIT) or TURN_UPDATE
         return true;
     }
 
@@ -1204,12 +1212,18 @@ void UIManager::showChallengeDialog(const std::string& opponent_name, int oppone
     gint response = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
 
-    // Get challenge ID from current screen
-    uint32_t challenge_id = GPOINTER_TO_UINT(
-        g_object_get_data(G_OBJECT(current_screen), "challenge_id"));
+    // Get challenge ID from current screen; fallback to stored pending_challenge_id_
+    uint32_t challenge_id = 0;
+    if (current_screen) {
+        challenge_id = GPOINTER_TO_UINT(
+            g_object_get_data(G_OBJECT(current_screen), "challenge_id"));
+    }
+    if (challenge_id == 0 && pending_challenge_id_ != 0) {
+        challenge_id = pending_challenge_id_;
+    }
 
     if (challenge_id == 0) {
-        std::cerr << "[UI] Error: No challenge ID found" << std::endl;
+        std::cerr << "[UI] Error: No challenge ID found (current_screen=null and no pending ID)" << std::endl;
         return;
     }
 
@@ -1219,5 +1233,8 @@ void UIManager::showChallengeDialog(const std::string& opponent_name, int oppone
     network->respondToChallenge(challenge_id, accept);
 
     // Clear challenge ID
-    g_object_set_data(G_OBJECT(current_screen), "challenge_id", GUINT_TO_POINTER(0));
+    if (current_screen) {
+        g_object_set_data(G_OBJECT(current_screen), "challenge_id", GUINT_TO_POINTER(0));
+    }
+    pending_challenge_id_ = 0;
 }

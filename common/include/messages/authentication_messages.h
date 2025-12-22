@@ -18,7 +18,10 @@ struct RegisterRequest {
     char email[128];        // Optional
 
     RegisterRequest() {
-        memset(this, 0, sizeof(RegisterRequest));
+        std::memset(username, 0, sizeof(username));
+        std::memset(password, 0, sizeof(password));
+        std::memset(display_name, 0, sizeof(display_name));
+        std::memset(email, 0, sizeof(email));
     }
 } __attribute__((packed));
 
@@ -27,10 +30,10 @@ struct RegisterResponse {
     uint32_t user_id;       // 0 if failed
     char error_message[128];
 
-    RegisterResponse() {
-        memset(this, 0, sizeof(RegisterResponse));
-        success = false;
-        user_id = 0;
+    RegisterResponse()
+        : success(false),
+          user_id(0) {
+        std::memset(error_message, 0, sizeof(error_message));
     }
 } __attribute__((packed));
 
@@ -41,7 +44,8 @@ struct LoginRequest {
     char password[64];      // SHA-256 hash (hex string)
 
     LoginRequest() {
-        memset(this, 0, sizeof(LoginRequest));
+        std::memset(username, 0, sizeof(username));
+        std::memset(password, 0, sizeof(password));
     }
 } __attribute__((packed));
 
@@ -53,11 +57,13 @@ struct LoginResponse {
     int32_t elo_rating;
     char error_message[128];
 
-    LoginResponse() {
-        memset(this, 0, sizeof(LoginResponse));
-        success = false;
-        user_id = 0;
-        elo_rating = 1000;
+    LoginResponse()
+        : success(false),
+          user_id(0),
+          elo_rating(1000) {
+        std::memset(session_token, 0, sizeof(session_token));
+        std::memset(display_name, 0, sizeof(display_name));
+        std::memset(error_message, 0, sizeof(error_message));
     }
 } __attribute__((packed));
 
@@ -67,7 +73,7 @@ struct LogoutRequest {
     char session_token[64];
 
     LogoutRequest() {
-        memset(this, 0, sizeof(LogoutRequest));
+        std::memset(session_token, 0, sizeof(session_token));
     }
 } __attribute__((packed));
 
@@ -85,7 +91,7 @@ struct SessionValidateRequest {
     char session_token[64];
 
     SessionValidateRequest() {
-        memset(this, 0, sizeof(SessionValidateRequest));
+        std::memset(session_token, 0, sizeof(session_token));
     }
 } __attribute__((packed));
 
@@ -97,11 +103,13 @@ struct SessionValidateResponse {
     int32_t elo_rating;
     char error_message[128];
 
-    SessionValidateResponse() {
-        memset(this, 0, sizeof(SessionValidateResponse));
-        valid = false;
-        user_id = 0;
-        elo_rating = 1000;
+    SessionValidateResponse()
+        : valid(false),
+          user_id(0),
+          elo_rating(1000) {
+        std::memset(username, 0, sizeof(username));
+        std::memset(display_name, 0, sizeof(display_name));
+        std::memset(error_message, 0, sizeof(error_message));
     }
 } __attribute__((packed));
 

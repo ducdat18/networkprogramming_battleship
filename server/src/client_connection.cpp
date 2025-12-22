@@ -82,6 +82,12 @@ bool ClientConnection::sendData(const void* data, size_t size) {
             if (errno == EINTR) {
                 continue;  // Interrupted, try again
             }
+
+            // In unit tests we may use dummy file descriptors; avoid noisy errors for EBADF
+            if (errno == EBADF) {
+                return false;
+            }
+
             std::cerr << "[ERROR] Send failed: " << strerror(errno) << std::endl;
             disconnect();
             return false;

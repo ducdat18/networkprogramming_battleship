@@ -94,7 +94,8 @@ bool ChallengeManager::respondToChallenge(uint32_t responder_id, const Challenge
     }
 
     if (!found) {
-        std::cerr << "[CHALLENGE] Challenge not found or expired: " << response.challenge_id << std::endl;
+        std::cout << "[CHALLENGE] Challenge " << response.challenge_id
+                  << " not found (possibly cancelled or expired)" << std::endl;
 
         // Notify responder
         ChallengeResult result;

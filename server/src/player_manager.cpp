@@ -22,6 +22,13 @@ void PlayerManager::addPlayer(ClientConnection* client, uint32_t user_id,
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
+        // Check if player already exists (same user_id from different connection)
+        auto it = players_.find(user_id);
+        if (it != players_.end()) {
+            std::cout << "[PLAYER_MANAGER] WARNING: Player " << display_name
+                      << " (ID: " << user_id << ") already exists! Overwriting..." << std::endl;
+        }
+
         PlayerData data;
         data.user_id = user_id;
         data.username = username;
@@ -33,7 +40,8 @@ void PlayerManager::addPlayer(ClientConnection* client, uint32_t user_id,
         players_[user_id] = data;
 
         std::cout << "[PLAYER_MANAGER] Player added: " << display_name
-                  << " (ID: " << user_id << ", ELO: " << elo_rating << ")" << std::endl;
+                  << " (ID: " << user_id << ", ELO: " << elo_rating 
+                  << "). Total players now: " << players_.size() << std::endl;
     } // Release lock before broadcasting
 
     // Broadcast status update to all clients (outside lock to avoid deadlock)
@@ -198,9 +206,14 @@ void PlayerManager::broadcastPlayerStatusUpdate(uint32_t user_id, PlayerStatus s
         header.timestamp = time(nullptr);
         memset(header.session_token, 0, sizeof(header.session_token));
 
+        std::cout << "[PLAYER_MANAGER] Broadcasting status update: "
+                  << info.display_name << " (ID: " << user_id 
+                  << ") -> Status: " << static_cast<int>(status) << std::endl;
+        
         server_->broadcast(header, serialize(update));
 
-        std::cout << "[PLAYER_MANAGER] Broadcasted status update: "
-                  << info.display_name << " -> " << static_cast<int>(status) << std::endl;
+        std::cout << "[PLAYER_MANAGER] Broadcast sent to all clients" << std::endl;
+    } else {
+        std::cerr << "[PLAYER_MANAGER] WARNING: Cannot broadcast - server not running!" << std::endl;
     }
 }

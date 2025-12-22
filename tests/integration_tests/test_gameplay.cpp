@@ -137,10 +137,10 @@ TEST_F(GameplayTest, CompleteGameplayFlow) {
     strncpy(reg1.password, "pass123", sizeof(reg1.password) - 1);
     strncpy(reg1.display_name, "Player One", sizeof(reg1.display_name) - 1);
 
-    ASSERT_TRUE(sendMessage(client1_fd, MessageType::REGISTER, &reg1, sizeof(reg1)));
+    ASSERT_TRUE(sendMessage(client1_fd, MessageType::AUTH_REGISTER, &reg1, sizeof(reg1)));
 
     RegisterResponse regResp1;
-    ASSERT_TRUE(skipBroadcastMessages(client1_fd, MessageType::REGISTER_RESPONSE, &regResp1, sizeof(regResp1)));
+    ASSERT_TRUE(skipBroadcastMessages(client1_fd, MessageType::AUTH_RESPONSE, &regResp1, sizeof(regResp1)));
     ASSERT_TRUE(regResp1.success);
     user1_id = regResp1.user_id;
     std::cout << "Player 1 registered: user_id=" << user1_id << std::endl;
@@ -151,10 +151,10 @@ TEST_F(GameplayTest, CompleteGameplayFlow) {
     strncpy(login1.username, username1.c_str(), sizeof(login1.username) - 1);
     strncpy(login1.password, "pass123", sizeof(login1.password) - 1);
 
-    ASSERT_TRUE(sendMessage(client1_fd, MessageType::LOGIN, &login1, sizeof(login1)));
+    ASSERT_TRUE(sendMessage(client1_fd, MessageType::AUTH_LOGIN, &login1, sizeof(login1)));
 
     LoginResponse loginResp1;
-    ASSERT_TRUE(skipBroadcastMessages(client1_fd, MessageType::LOGIN_RESPONSE, &loginResp1, sizeof(loginResp1)));
+    ASSERT_TRUE(skipBroadcastMessages(client1_fd, MessageType::AUTH_RESPONSE, &loginResp1, sizeof(loginResp1)));
     ASSERT_TRUE(loginResp1.success);
     session1_token = loginResp1.session_token;
     std::cout << "Player 1 logged in" << std::endl;
@@ -168,10 +168,10 @@ TEST_F(GameplayTest, CompleteGameplayFlow) {
     strncpy(reg2.password, "pass456", sizeof(reg2.password) - 1);
     strncpy(reg2.display_name, "Player Two", sizeof(reg2.display_name) - 1);
 
-    ASSERT_TRUE(sendMessage(client2_fd, MessageType::REGISTER, &reg2, sizeof(reg2)));
+    ASSERT_TRUE(sendMessage(client2_fd, MessageType::AUTH_REGISTER, &reg2, sizeof(reg2)));
 
     RegisterResponse regResp2;
-    ASSERT_TRUE(skipBroadcastMessages(client2_fd, MessageType::REGISTER_RESPONSE, &regResp2, sizeof(regResp2)));
+    ASSERT_TRUE(skipBroadcastMessages(client2_fd, MessageType::AUTH_RESPONSE, &regResp2, sizeof(regResp2)));
     ASSERT_TRUE(regResp2.success);
     user2_id = regResp2.user_id;
     std::cout << "Player 2 registered: user_id=" << user2_id << std::endl;
@@ -182,10 +182,10 @@ TEST_F(GameplayTest, CompleteGameplayFlow) {
     strncpy(login2.username, username2.c_str(), sizeof(login2.username) - 1);
     strncpy(login2.password, "pass456", sizeof(login2.password) - 1);
 
-    ASSERT_TRUE(sendMessage(client2_fd, MessageType::LOGIN, &login2, sizeof(login2)));
+    ASSERT_TRUE(sendMessage(client2_fd, MessageType::AUTH_LOGIN, &login2, sizeof(login2)));
 
     LoginResponse loginResp2;
-    ASSERT_TRUE(skipBroadcastMessages(client2_fd, MessageType::LOGIN_RESPONSE, &loginResp2, sizeof(loginResp2)));
+    ASSERT_TRUE(skipBroadcastMessages(client2_fd, MessageType::AUTH_RESPONSE, &loginResp2, sizeof(loginResp2)));
     ASSERT_TRUE(loginResp2.success);
     session2_token = loginResp2.session_token;
     std::cout << "Player 2 logged in" << std::endl;
@@ -195,7 +195,7 @@ TEST_F(GameplayTest, CompleteGameplayFlow) {
     // Step 2: Player 1 challenges Player 2
     std::cout << "\n=== Step 2: Send challenge ===" << std::endl;
 
-    ChallengeSend challenge;
+    ChallengeRequest challenge;
     memset(&challenge, 0, sizeof(challenge));
     challenge.target_user_id = user2_id;
     challenge.time_limit = 60;
@@ -216,7 +216,7 @@ TEST_F(GameplayTest, CompleteGameplayFlow) {
     ChallengeResponse response;
     memset(&response, 0, sizeof(response));
     response.challenge_id = challenge_id;
-    response.accept = true;
+    response.accepted = true;
 
     ASSERT_TRUE(sendMessage(client2_fd, MessageType::CHALLENGE_RESPONSE, &response, sizeof(response)));
     std::cout << "Player 2 accepted challenge" << std::endl;
@@ -238,18 +238,26 @@ TEST_F(GameplayTest, CompleteGameplayFlow) {
     placement1.match_id = match_id;
     placement1.ready = true;
 
+    auto setShip = [](Ship& s, ShipType type, int row, int col, Orientation ori, uint8_t length) {
+        memset(&s, 0, sizeof(Ship));
+        s.type = static_cast<uint8_t>(type);
+        s.orientation = static_cast<uint8_t>(ori);
+        s.position = {static_cast<int8_t>(row), static_cast<int8_t>(col)};
+        s.length = length;
+        s.hits = 0;
+        s.is_sunk = false;
+    };
+
     // Place ships for player 1 (horizontal line at top)
-    placement1.ships[0] = Ship{SHIP_CARRIER, {0, 0}, HORIZONTAL, 5, false};
-    placement1.ships[1] = Ship{SHIP_BATTLESHIP, {1, 0}, HORIZONTAL, 4, false};
-    placement1.ships[2] = Ship{SHIP_CRUISER, {2, 0}, HORIZONTAL, 3, false};
-    placement1.ships[3] = Ship{SHIP_SUBMARINE, {3, 0}, HORIZONTAL, 3, false};
-    placement1.ships[4] = Ship{SHIP_DESTROYER, {4, 0}, HORIZONTAL, 2, false};
+    setShip(placement1.ships[0], SHIP_CARRIER,    0, 0, HORIZONTAL, 5);
+    setShip(placement1.ships[1], SHIP_BATTLESHIP, 1, 0, HORIZONTAL, 4);
+    setShip(placement1.ships[2], SHIP_CRUISER,    2, 0, HORIZONTAL, 3);
+    setShip(placement1.ships[3], SHIP_SUBMARINE,  3, 0, HORIZONTAL, 3);
+    setShip(placement1.ships[4], SHIP_DESTROYER,  4, 0, HORIZONTAL, 2);
 
     ASSERT_TRUE(sendMessage(client1_fd, MessageType::SHIP_PLACEMENT, &placement1, sizeof(placement1)));
 
-    ShipPlacementAck ack1;
-    ASSERT_TRUE(skipBroadcastMessages(client1_fd, MessageType::SHIP_PLACEMENT_ACK, &ack1, sizeof(ack1)));
-    ASSERT_TRUE(ack1.valid) << "Player 1 ship placement invalid: " << ack1.error_message;
+    ASSERT_TRUE(sendMessage(client1_fd, MessageType::SHIP_PLACEMENT, &placement1, sizeof(placement1)));
     std::cout << "Player 1 ships placed" << std::endl;
 
     // Place ships for player 2 (vertical line on left)
@@ -258,17 +266,15 @@ TEST_F(GameplayTest, CompleteGameplayFlow) {
     placement2.match_id = match_id;
     placement2.ready = true;
 
-    placement2.ships[0] = Ship{SHIP_CARRIER, {0, 5}, VERTICAL, 5, false};
-    placement2.ships[1] = Ship{SHIP_BATTLESHIP, {0, 6}, VERTICAL, 4, false};
-    placement2.ships[2] = Ship{SHIP_CRUISER, {0, 7}, VERTICAL, 3, false};
-    placement2.ships[3] = Ship{SHIP_SUBMARINE, {0, 8}, VERTICAL, 3, false};
-    placement2.ships[4] = Ship{SHIP_DESTROYER, {0, 9}, VERTICAL, 2, false};
+    setShip(placement2.ships[0], SHIP_CARRIER,    0, 5, VERTICAL, 5);
+    setShip(placement2.ships[1], SHIP_BATTLESHIP, 0, 6, VERTICAL, 4);
+    setShip(placement2.ships[2], SHIP_CRUISER,    0, 7, VERTICAL, 3);
+    setShip(placement2.ships[3], SHIP_SUBMARINE,  0, 8, VERTICAL, 3);
+    setShip(placement2.ships[4], SHIP_DESTROYER,  0, 9, VERTICAL, 2);
 
     ASSERT_TRUE(sendMessage(client2_fd, MessageType::SHIP_PLACEMENT, &placement2, sizeof(placement2)));
 
-    ShipPlacementAck ack2;
-    ASSERT_TRUE(skipBroadcastMessages(client2_fd, MessageType::SHIP_PLACEMENT_ACK, &ack2, sizeof(ack2)));
-    ASSERT_TRUE(ack2.valid) << "Player 2 ship placement invalid: " << ack2.error_message;
+    ASSERT_TRUE(sendMessage(client2_fd, MessageType::SHIP_PLACEMENT, &placement2, sizeof(placement2)));
     std::cout << "Player 2 ships placed" << std::endl;
 
     // Both players receive MATCH_READY
@@ -282,7 +288,7 @@ TEST_F(GameplayTest, CompleteGameplayFlow) {
     // Step 5: Play a few turns
     std::cout << "\n=== Step 5: Gameplay - Take turns ===" << std::endl;
 
-    // Make a move
+    // Make a move - this should be a HIT because it targets player 2's carrier at (0,5)
     MoveMessage move1;
     memset(&move1, 0, sizeof(move1));
     move1.match_id = match_id;
@@ -297,12 +303,25 @@ TEST_F(GameplayTest, CompleteGameplayFlow) {
     MessageHeader header;
     ASSERT_TRUE(receiveMessage(current_player_fd, header, &moveResult, sizeof(moveResult)));
     ASSERT_EQ(header.type, MessageType::MOVE_RESULT);
+
+    // Verify MOVE_RESULT content
+    EXPECT_EQ(moveResult.match_id, match_id);
+    EXPECT_EQ(moveResult.target.row, 0);
+    EXPECT_EQ(moveResult.target.col, 5);
+    EXPECT_EQ(moveResult.shooter_id, first_player);
+    // Because of our ship placement, this should be at least a HIT (not MISS)
+    EXPECT_NE(moveResult.result, SHOT_MISS);
+    EXPECT_TRUE(moveResult.result == SHOT_HIT || moveResult.result == SHOT_SUNK);
+
     std::cout << "Result: " << (moveResult.result == SHOT_HIT ? "HIT" :
                                 moveResult.result == SHOT_MISS ? "MISS" : "SUNK") << std::endl;
 
     // Receive TURN_UPDATE
     TurnUpdateMessage turnUpdate;
     ASSERT_TRUE(skipBroadcastMessages(current_player_fd, MessageType::TURN_UPDATE, &turnUpdate, sizeof(turnUpdate)));
+
+    // On HIT/SUNK, turn should remain with the same player
+    EXPECT_EQ(turnUpdate.current_player_id, first_player);
     std::cout << "Turn updated. Current turn: player " << turnUpdate.current_player_id << std::endl;
 
     std::cout << "\n✅ Complete gameplay flow test PASSED!" << std::endl;

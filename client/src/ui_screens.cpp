@@ -255,7 +255,10 @@ GtkWidget* UIManager::createMainMenuScreen() {
     GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_size_request(header, -1, 40);
     GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
+    #pragma GCC diagnostic pop
 
     GtkWidget* logo = gtk_label_new("");
     gtk_widget_set_name(logo, "logo");
@@ -360,7 +363,10 @@ GtkWidget* UIManager::createLoginScreen() {
     GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_size_request(header, -1, 50);
     GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0}; // Navy
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
+    #pragma GCC diagnostic pop
 
     // Make header draggable to move window
     makeDraggable(header, main_window);
@@ -490,7 +496,10 @@ GtkWidget* UIManager::createRegisterScreen() {
     GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_size_request(header, -1, 50);
     GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
+    #pragma GCC diagnostic pop
 
     GtkWidget* header_title = gtk_label_new("ENLIST - CREATE ACCOUNT");
     gtk_widget_set_margin_start(header_title, 20);
@@ -591,7 +600,10 @@ GtkWidget* UIManager::createShipPlacementScreen() {
     GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
     gtk_widget_set_size_request(header, -1, 60);
     GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
+    #pragma GCC diagnostic pop
     gtk_widget_set_margin_start(header, 20);
     gtk_widget_set_margin_end(header, 20);
 

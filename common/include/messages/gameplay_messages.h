@@ -17,10 +17,10 @@ struct ShipPlacementMessage {
     Ship ships[5];          // All 5 ships
     bool ready;             // True when placement confirmed
 
-    ShipPlacementMessage() {
-        memset(this, 0, sizeof(ShipPlacementMessage));
-        match_id = 0;
-        ready = false;
+    ShipPlacementMessage()
+        : match_id(0),
+          ready(false) {
+        std::memset(ships, 0, sizeof(ships));
     }
 } __attribute__((packed));
 
@@ -29,10 +29,10 @@ struct ShipPlacementAck {
     bool valid;
     char error_message[128];
 
-    ShipPlacementAck() {
-        memset(this, 0, sizeof(ShipPlacementAck));
-        match_id = 0;
-        valid = false;
+    ShipPlacementAck()
+        : match_id(0),
+          valid(false) {
+        std::memset(error_message, 0, sizeof(error_message));
     }
 } __attribute__((packed));
 
@@ -42,14 +42,16 @@ struct MoveMessage {
     uint32_t match_id;
     Coordinate target;
 
-    MoveMessage() {
-        memset(this, 0, sizeof(MoveMessage));
-        match_id = 0;
+    MoveMessage()
+        : match_id(0) {
+        target.row = 0;
+        target.col = 0;
     }
 } __attribute__((packed));
 
 struct MoveResultMessage {
     uint32_t match_id;
+    uint32_t shooter_id;    // Who made this shot
     Coordinate target;
     ShotResult result;      // MISS, HIT, SUNK
     ShipType ship_sunk;     // If result == SUNK
@@ -57,14 +59,16 @@ struct MoveResultMessage {
     bool game_over;
     uint32_t winner_id;     // If game_over
 
-    MoveResultMessage() {
-        memset(this, 0, sizeof(MoveResultMessage));
-        match_id = 0;
-        result = SHOT_MISS;
-        ship_sunk = SHIP_CARRIER;
-        ships_remaining = 5;
-        game_over = false;
-        winner_id = 0;
+    MoveResultMessage()
+        : match_id(0),
+          shooter_id(0),
+          result(SHOT_MISS),
+          ship_sunk(SHIP_CARRIER),
+          ships_remaining(5),
+          game_over(false),
+          winner_id(0) {
+        target.row = 0;
+        target.col = 0;
     }
 } __attribute__((packed));
 
@@ -74,12 +78,11 @@ struct TurnUpdateMessage {
     uint32_t turn_number;
     uint32_t time_left;     // Seconds remaining for turn
 
-    TurnUpdateMessage() {
-        memset(this, 0, sizeof(TurnUpdateMessage));
-        match_id = 0;
-        current_player_id = 0;
-        turn_number = 1;
-        time_left = 60;
+    TurnUpdateMessage()
+        : match_id(0),
+          current_player_id(0),
+          turn_number(1),
+          time_left(60) {
     }
 } __attribute__((packed));
 
@@ -94,15 +97,14 @@ struct MatchStateMessage {
     bool is_active;
     bool is_paused;
 
-    MatchStateMessage() {
-        memset(this, 0, sizeof(MatchStateMessage));
-        match_id = 0;
-        player1_id = 0;
-        player2_id = 0;
-        current_turn_player_id = 0;
-        turn_number = 1;
-        is_active = false;
-        is_paused = false;
+    MatchStateMessage()
+        : match_id(0),
+          player1_id(0),
+          player2_id(0),
+          current_turn_player_id(0),
+          turn_number(1),
+          is_active(false),
+          is_paused(false) {
     }
 } __attribute__((packed));
 
@@ -117,15 +119,14 @@ struct MatchEndMessage {
     uint32_t total_moves;
     uint64_t duration;      // Seconds
 
-    MatchEndMessage() {
-        memset(this, 0, sizeof(MatchEndMessage));
-        match_id = 0;
-        result = RESULT_DRAW;
-        winner_id = 0;
-        elo_change = 0;
-        new_elo = 1000;
-        total_moves = 0;
-        duration = 0;
+    MatchEndMessage()
+        : match_id(0),
+          result(RESULT_DRAW),
+          winner_id(0),
+          elo_change(0),
+          new_elo(1000),
+          total_moves(0),
+          duration(0) {
     }
 } __attribute__((packed));
 

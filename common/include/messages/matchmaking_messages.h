@@ -19,11 +19,12 @@ struct PlayerInfo_Message {
     int32_t elo_rating;
     PlayerStatus status;    // ONLINE, AVAILABLE, IN_GAME, BUSY
 
-    PlayerInfo_Message() {
-        memset(this, 0, sizeof(PlayerInfo_Message));
-        user_id = 0;
-        elo_rating = 1000;
-        status = STATUS_OFFLINE;
+    PlayerInfo_Message()
+        : user_id(0),
+          elo_rating(1000),
+          status(STATUS_OFFLINE) {
+        std::memset(username, 0, sizeof(username));
+        std::memset(display_name, 0, sizeof(display_name));
     }
 } __attribute__((packed));
 
@@ -36,9 +37,9 @@ struct PlayerListResponse {
     uint32_t count;         // Number of players
     PlayerInfo_Message players[100];  // Max 100 players in one message
 
-    PlayerListResponse() {
-        memset(this, 0, sizeof(PlayerListResponse));
-        count = 0;
+    PlayerListResponse()
+        : count(0) {
+        std::memset(players, 0, sizeof(players));
     }
 } __attribute__((packed));
 
@@ -50,11 +51,11 @@ struct PlayerStatusUpdate {
     char display_name[64];
     int32_t elo_rating;
 
-    PlayerStatusUpdate() {
-        memset(this, 0, sizeof(PlayerStatusUpdate));
-        user_id = 0;
-        status = STATUS_OFFLINE;
-        elo_rating = 1000;
+    PlayerStatusUpdate()
+        : user_id(0),
+          status(STATUS_OFFLINE),
+          elo_rating(1000) {
+        std::memset(display_name, 0, sizeof(display_name));
     }
 } __attribute__((packed));
 
@@ -65,11 +66,10 @@ struct ChallengeRequest {
     uint32_t time_limit;        // Seconds per turn (0 = unlimited)
     bool random_placement;      // Auto-place ships?
 
-    ChallengeRequest() {
-        memset(this, 0, sizeof(ChallengeRequest));
-        target_user_id = 0;
-        time_limit = 60;
-        random_placement = false;
+    ChallengeRequest()
+        : target_user_id(0),
+          time_limit(60),
+          random_placement(false) {
     }
 } __attribute__((packed));
 
@@ -82,14 +82,14 @@ struct ChallengeReceived {
     bool random_placement;
     uint64_t expires_at;        // Unix timestamp
 
-    ChallengeReceived() {
-        memset(this, 0, sizeof(ChallengeReceived));
-        challenge_id = 0;
-        challenger_id = 0;
-        challenger_elo = 1000;
-        time_limit = 60;
-        random_placement = false;
-        expires_at = 0;
+    ChallengeReceived()
+        : challenge_id(0),
+          challenger_id(0),
+          challenger_elo(1000),
+          time_limit(60),
+          random_placement(false),
+          expires_at(0) {
+        std::memset(challenger_name, 0, sizeof(challenger_name));
     }
 } __attribute__((packed));
 
@@ -97,10 +97,9 @@ struct ChallengeResponse {
     uint32_t challenge_id;
     bool accepted;
 
-    ChallengeResponse() {
-        memset(this, 0, sizeof(ChallengeResponse));
-        challenge_id = 0;
-        accepted = false;
+    ChallengeResponse()
+        : challenge_id(0),
+          accepted(false) {
     }
 } __attribute__((packed));
 
@@ -110,11 +109,11 @@ struct ChallengeResult {
     uint32_t match_id;      // If accepted
     char error_message[128];
 
-    ChallengeResult() {
-        memset(this, 0, sizeof(ChallengeResult));
-        challenge_id = 0;
-        success = false;
-        match_id = 0;
+    ChallengeResult()
+        : challenge_id(0),
+          success(false),
+          match_id(0) {
+        std::memset(error_message, 0, sizeof(error_message));
     }
 } __attribute__((packed));
 
@@ -128,13 +127,13 @@ struct MatchStartMessage {
     uint32_t time_limit;
     bool you_go_first;
 
-    MatchStartMessage() {
-        memset(this, 0, sizeof(MatchStartMessage));
-        match_id = 0;
-        opponent_id = 0;
-        opponent_elo = 1000;
-        time_limit = 60;
-        you_go_first = false;
+    MatchStartMessage()
+        : match_id(0),
+          opponent_id(0),
+          opponent_elo(1000),
+          time_limit(60),
+          you_go_first(false) {
+        std::memset(opponent_name, 0, sizeof(opponent_name));
     }
 } __attribute__((packed));
 

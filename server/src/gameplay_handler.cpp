@@ -3,6 +3,8 @@
 #include "player_manager.h"
 #include <cstring>
 #include <iostream>
+#include <sstream>
+#include <cmath>
 
 GameplayHandler::GameplayHandler(Server* server, DatabaseManager* db)
     : server_(server), db_(db) {
@@ -181,13 +183,54 @@ void GameplayHandler::handleShipPlacement(const MessageHeader& header,
         // Load ships from database for both players
         auto match = getMatch(msg.match_id);
         if (match) {
+            // Helper lambda to parse simple "type,orient,row,col;..." format
+            auto loadShips = [](Board& board, const std::string& data) {
+                if (data.empty()) {
+                    return;
+                }
+                // Start from a clean board
+                board.clearBoard();
+
+                std::stringstream ss(data);
+                std::string token;
+                while (std::getline(ss, token, ';')) {
+                    if (token.empty()) continue;
+
+                    std::stringstream ship_ss(token);
+                    std::string field;
+                    int type_i = 0, orient_i = 0, row = 0, col = 0;
+
+                    // type
+                    if (!std::getline(ship_ss, field, ',')) continue;
+                    type_i = std::stoi(field);
+                    // orientation
+                    if (!std::getline(ship_ss, field, ',')) continue;
+                    orient_i = std::stoi(field);
+                    // row
+                    if (!std::getline(ship_ss, field, ',')) continue;
+                    row = std::stoi(field);
+                    // col
+                    if (!std::getline(ship_ss, field, ',')) continue;
+                    col = std::stoi(field);
+
+                    ShipType type = static_cast<ShipType>(type_i);
+                    Orientation orient = static_cast<Orientation>(orient_i);
+                    Coordinate pos;
+                    pos.row = row;
+                    pos.col = col;
+
+                    // Place ship on board; ignore invalid placements (already validated earlier)
+                    board.placeShip(type, pos, orient);
+                }
+            };
+
             // Parse and place ships for player 1
             std::string p1_ships = db_->getShipPlacement(msg.match_id, player1_id);
-            // TODO: Deserialize and place ships on match->player1_board
+            loadShips(match->player1_board, p1_ships);
 
             // Parse and place ships for player 2
             std::string p2_ships = db_->getShipPlacement(msg.match_id, player2_id);
-            // TODO: Deserialize and place ships on match->player2_board
+            loadShips(match->player2_board, p2_ships);
 
             // Start the match
             match->startMatch();
@@ -210,6 +253,7 @@ void GameplayHandler::handleShipPlacement(const MessageHeader& header,
 void GameplayHandler::handleMove(const MessageHeader& header,
                                 const MoveMessage& msg,
                                 int client_fd) {
+    (void)client_fd;
     // Validate session
     std::string token(header.session_token);
     uint32_t user_id = db_->validateSession(token);
@@ -303,6 +347,7 @@ void GameplayHandler::handleMove(const MessageHeader& header,
 void GameplayHandler::handleResign(const MessageHeader& header,
                                   const ResignMessage& msg,
                                   int client_fd) {
+    (void)client_fd;
     // Validate session
     std::string token(header.session_token);
     uint32_t user_id = db_->validateSession(token);
@@ -341,6 +386,7 @@ void GameplayHandler::handleResign(const MessageHeader& header,
 void GameplayHandler::handleDrawOffer(const MessageHeader& header,
                                      const DrawOfferMessage& msg,
                                      int client_fd) {
+    (void)client_fd;
     // Validate session
     std::string token(header.session_token);
     uint32_t user_id = db_->validateSession(token);
@@ -372,6 +418,7 @@ void GameplayHandler::handleDrawOffer(const MessageHeader& header,
 void GameplayHandler::handleDrawResponse(const MessageHeader& header,
                                         const DrawResponseMessage& msg,
                                         int client_fd) {
+    (void)client_fd;
     // Validate session
     std::string token(header.session_token);
     uint32_t user_id = db_->validateSession(token);
@@ -545,6 +592,7 @@ void GameplayHandler::sendMoveResult(uint32_t match_id, uint32_t shooter_id, uin
                                      uint32_t ships_remaining, bool game_over, uint32_t winner_id) {
     MoveResultMessage msg;
     msg.match_id = match_id;
+    msg.shooter_id = shooter_id;  // Include shooter ID so clients know whose shot this is
     msg.target = target;
     msg.result = result;
     msg.ship_sunk = ship_sunk;
@@ -613,8 +661,52 @@ void GameplayHandler::sendMatchEnd(uint32_t match_id, uint32_t player1_id, uint3
     msg1.winner_id = winner_id;
     msg1.total_moves = total_moves;
     msg1.duration = duration;
-    msg1.elo_change = 0; // TODO: Calculate ELO change
-    msg1.new_elo = 1000; // TODO: Get from database
+    // Calculate and apply ELO changes (simple Elo system)
+    int32_t p1_old_elo = 1000;
+    int32_t p2_old_elo = 1000;
+
+    if (db_) {
+        User p1 = db_->getUserById(player1_id);
+        User p2 = db_->getUserById(player2_id);
+        if (p1.user_id == player1_id) p1_old_elo = p1.elo_rating;
+        if (p2.user_id == player2_id) p2_old_elo = p2.elo_rating;
+    }
+
+    // Elo calculation
+    auto computeElo = [](int32_t ra, int32_t rb, double score, int k = 30) -> int32_t {
+        double ea = 1.0 / (1.0 + std::pow(10.0, (rb - ra) / 400.0));
+        double new_ra = ra + k * (score - ea);
+        return static_cast<int32_t>(std::round(new_ra));
+    };
+
+    int32_t p1_new_elo = p1_old_elo;
+    int32_t p2_new_elo = p2_old_elo;
+    int32_t p1_change = 0;
+    int32_t p2_change = 0;
+
+    if (winner_id == 0) {
+        // Draw: both get 0.5
+        p1_new_elo = computeElo(p1_old_elo, p2_old_elo, 0.5);
+        p2_new_elo = computeElo(p2_old_elo, p1_old_elo, 0.5);
+    } else if (winner_id == player1_id) {
+        p1_new_elo = computeElo(p1_old_elo, p2_old_elo, 1.0);
+        p2_new_elo = computeElo(p2_old_elo, p1_old_elo, 0.0);
+    } else if (winner_id == player2_id) {
+        p1_new_elo = computeElo(p1_old_elo, p2_old_elo, 0.0);
+        p2_new_elo = computeElo(p2_old_elo, p1_old_elo, 1.0);
+    }
+
+    p1_change = p1_new_elo - p1_old_elo;
+    p2_change = p2_new_elo - p2_old_elo;
+
+    // Persist ELO changes
+    if (db_) {
+        db_->updateEloRating(player1_id, p1_new_elo);
+        db_->updateEloRating(player2_id, p2_new_elo);
+    }
+
+    msg1.elo_change = p1_change;
+    msg1.new_elo = p1_new_elo;
 
     if (winner_id == 0) {
         msg1.result = RESULT_DRAW;
@@ -646,6 +738,10 @@ void GameplayHandler::sendMatchEnd(uint32_t match_id, uint32_t player1_id, uint3
         } else {
             msg2.result = RESULT_LOSS;
         }
+
+        // For player 2, adjust ELO values
+        msg2.elo_change = p2_change;
+        msg2.new_elo = p2_new_elo;
 
         ClientConnection* p2_conn = player_manager->getClientConnection(player2_id);
         if (p2_conn) {

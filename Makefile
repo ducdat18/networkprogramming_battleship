@@ -194,11 +194,19 @@ $(TEST_DATABASE): $(UNIT_TEST_DIR)/database/test_database.cpp $(COMMON_OBJECTS) 
 # Test PlayerManager
 $(TEST_PLAYER_MANAGER): $(UNIT_TEST_DIR)/server/test_player_manager.cpp $(COMMON_OBJECTS) build/server/player_manager.o build/server/server.o build/server/client_connection.o build/server/database.o build/server/auth_handler.o build/server/player_handler.o
 	@echo "$(YELLOW)🧪 Building PlayerManager tests...$(NC)"
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lsqlite3 -lssl -lcrypto
+	$(CXX) $(CXXFLAGS) $(INCLUDES) \
+		$^ \
+		build/server/challenge_manager.o \
+		build/server/challenge_handler.o \
+		build/server/gameplay_handler.o \
+		-o $@ $(GTEST_FLAGS) -lsqlite3 -lssl -lcrypto
 	@echo "$(GREEN)✅ PlayerManager tests built!$(NC)"
 
 # Test ChallengeManager
-$(TEST_CHALLENGE_MANAGER): $(UNIT_TEST_DIR)/server/test_challenge_manager.cpp $(COMMON_OBJECTS) build/server/challenge_manager.o build/server/challenge_handler.o build/server/player_manager.o build/server/server.o build/server/client_connection.o build/server/database.o build/server/auth_handler.o build/server/player_handler.o
+$(TEST_CHALLENGE_MANAGER): $(UNIT_TEST_DIR)/server/test_challenge_manager.cpp $(COMMON_OBJECTS) \
+	build/server/challenge_manager.o build/server/challenge_handler.o build/server/gameplay_handler.o \
+	build/server/player_manager.o build/server/server.o build/server/client_connection.o build/server/database.o \
+	build/server/auth_handler.o build/server/player_handler.o
 	@echo "$(YELLOW)🧪 Building ChallengeManager tests...$(NC)"
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ $(GTEST_FLAGS) -lsqlite3 -lssl -lcrypto
 	@echo "$(GREEN)✅ ChallengeManager tests built!$(NC)"

@@ -199,6 +199,41 @@ void UIManager::drawBoard(cairo_t* cr, Board* board, bool is_player_board) {
         }
     }
 
+    // Re-draw hit markers on top of ships (so they're visible)
+    for (int row = 0; row < BOARD_SIZE; row++) {
+        for (int col = 0; col < BOARD_SIZE; col++) {
+            CellState state = board->getCell(row, col);
+            if (state == CELL_HIT || state == CELL_SUNK) {
+                // Draw hit marker on top of ship
+                double x = BOARD_MARGIN + col * CELL_SIZE + CELL_PADDING;
+                double y = BOARD_MARGIN + row * CELL_SIZE + CELL_PADDING;
+                double size = CELL_SIZE - CELL_PADDING * 2;
+                double cx = x + size/2;
+                double cy = y + size/2;
+                
+                if (state == CELL_HIT) {
+                    // Draw red X marker on top
+                    double mark_size = is_player_board ? 14 : 10;
+                    cairo_set_source_rgb(cr, ColorScheme::HIT_R, ColorScheme::HIT_G, ColorScheme::HIT_B);
+                    cairo_set_line_width(cr, is_player_board ? 4.0 : 3.0);
+                    cairo_move_to(cr, cx - mark_size, cy - mark_size);
+                    cairo_line_to(cr, cx + mark_size, cy + mark_size);
+                    cairo_move_to(cr, cx + mark_size, cy - mark_size);
+                    cairo_line_to(cr, cx - mark_size, cy + mark_size);
+                    cairo_stroke(cr);
+                } else if (state == CELL_SUNK) {
+                    // Draw red outline for sunk cells
+                    cairo_set_source_rgba(cr, ColorScheme::HIT_R,
+                                            ColorScheme::HIT_G,
+                                            ColorScheme::HIT_B, 0.9);
+                    cairo_set_line_width(cr, 3.0);
+                    cairo_rectangle(cr, x + 1, y + 1, size - 2, size - 2);
+                    cairo_stroke(cr);
+                }
+            }
+        }
+    }
+
     // Draw coordinate labels with sand color
     cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
     cairo_set_font_size(cr, 12);
@@ -229,8 +264,6 @@ void UIManager::drawCell(cairo_t* cr, int row, int col, CellState state, bool is
     double y = BOARD_MARGIN + row * CELL_SIZE + CELL_PADDING;
     double size = CELL_SIZE - CELL_PADDING * 2;
 
-    AssetManager* assets = AssetManager::getInstance();
-
     // Base cell color - ocean water
     cairo_set_source_rgba(cr, ColorScheme::OCEAN_DEEP_R,
                              ColorScheme::OCEAN_DEEP_G,
@@ -247,12 +280,42 @@ void UIManager::drawCell(cairo_t* cr, int row, int col, CellState state, bool is
         }
 
         case CELL_HIT: {
-            // Draw small red X marker to indicate hit
-            cairo_set_source_rgb(cr, ColorScheme::HIT_R, ColorScheme::HIT_G, ColorScheme::HIT_B);
-            cairo_set_line_width(cr, 3.0);
+            // Enhanced visual for hit cells, especially on player's own board
+            if (is_player_board) {
+                // On player's board: show red background to make it very obvious
+                cairo_set_source_rgba(cr, ColorScheme::HIT_R, ColorScheme::HIT_G, ColorScheme::HIT_B, 0.4);
+                cairo_rectangle(cr, x, y, size, size);
+                cairo_fill(cr);
+                
+                // Red border to emphasize
+                cairo_set_source_rgba(cr, ColorScheme::HIT_R, ColorScheme::HIT_G, ColorScheme::HIT_B, 0.9);
+                cairo_set_line_width(cr, 3.0);
+                cairo_rectangle(cr, x + 1, y + 1, size - 2, size - 2);
+                cairo_stroke(cr);
+            }
+            
+            // Draw prominent red X marker
             double cx = x + size/2;
             double cy = y + size/2;
-            double mark_size = 10;
+            double mark_size = is_player_board ? 14 : 10;  // Larger on player board
+            cairo_set_source_rgb(cr, ColorScheme::HIT_R, ColorScheme::HIT_G, ColorScheme::HIT_B);
+            cairo_set_line_width(cr, is_player_board ? 4.0 : 3.0);  // Thicker on player board
+            
+            // Draw X with slight glow effect on player board
+            if (is_player_board) {
+                // Outer glow
+                cairo_set_source_rgba(cr, ColorScheme::HIT_R, ColorScheme::HIT_G, ColorScheme::HIT_B, 0.5);
+                cairo_set_line_width(cr, 6.0);
+                cairo_move_to(cr, cx - mark_size, cy - mark_size);
+                cairo_line_to(cr, cx + mark_size, cy + mark_size);
+                cairo_move_to(cr, cx + mark_size, cy - mark_size);
+                cairo_line_to(cr, cx - mark_size, cy + mark_size);
+                cairo_stroke(cr);
+            }
+            
+            // Main X
+            cairo_set_source_rgb(cr, ColorScheme::HIT_R, ColorScheme::HIT_G, ColorScheme::HIT_B);
+            cairo_set_line_width(cr, is_player_board ? 4.0 : 3.0);
             cairo_move_to(cr, cx - mark_size, cy - mark_size);
             cairo_line_to(cr, cx + mark_size, cy + mark_size);
             cairo_move_to(cr, cx + mark_size, cy - mark_size);
@@ -262,11 +325,30 @@ void UIManager::drawCell(cairo_t* cr, int row, int col, CellState state, bool is
         }
 
         case CELL_MISS: {
-            // Draw small blue circle for miss
+            // Draw miss marker - more visible on player's board
+            double cx = x + size/2;
+            double cy = y + size/2;
+            double radius = is_player_board ? 8 : 6;  // Larger on player board
+            
+            if (is_player_board) {
+                // On player's board: add subtle background
+                cairo_set_source_rgba(cr, ColorScheme::MISS_R,
+                                       ColorScheme::MISS_G,
+                                       ColorScheme::MISS_B, 0.3);
+                cairo_arc(cr, cx, cy, radius + 2, 0, 2 * M_PI);
+                cairo_fill(cr);
+            }
+            
+            // Draw circle
             cairo_set_source_rgb(cr, ColorScheme::MISS_R,
                                    ColorScheme::MISS_G,
                                    ColorScheme::MISS_B);
-            cairo_arc(cr, x + size/2, y + size/2, 6, 0, 2 * M_PI);
+            cairo_arc(cr, cx, cy, radius, 0, 2 * M_PI);
+            cairo_fill(cr);
+            
+            // White center dot for better visibility
+            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+            cairo_arc(cr, cx, cy, radius * 0.4, 0, 2 * M_PI);
             cairo_fill(cr);
             break;
         }

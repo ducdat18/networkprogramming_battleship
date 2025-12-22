@@ -107,11 +107,20 @@ static void on_refresh_clicked(GtkButton* button, gpointer data) {
             }
 
             std::cout << "[LOBBY] ✅ Received " << players.size() << " players" << std::endl;
+            
+            // Debug: Print all received players
+            uint32_t current_user_id = lobby->ui->network->getUserId();
+            std::cout << "[LOBBY] Current user ID: " << current_user_id << std::endl;
+            for (const auto& player : players) {
+                std::cout << "[LOBBY]   - Player: " << player.display_name 
+                          << " (ID: " << player.user_id 
+                          << ", Status: " << (int)player.status << ")" << std::endl;
+            }
 
             // Clear existing list
             gtk_list_store_clear(lobby->player_list_store);
 
-            // Add players to tree view
+            // Add players to tree view (including self - no filtering)
             for (const auto& player : players) {
                 GtkTreeIter iter;
                 gtk_list_store_append(lobby->player_list_store, &iter);
@@ -128,8 +137,12 @@ static void on_refresh_clicked(GtkButton* button, gpointer data) {
 
 // Update player status in tree view
 static void updatePlayerStatus(LobbyData* lobby, const PlayerStatusUpdate& update) {
+    std::cout << "[LOBBY] updatePlayerStatus called for: " << update.display_name 
+              << " (ID: " << update.user_id << ", Status: " << (int)update.status << ")" << std::endl;
+    
     GtkTreeIter iter;
     gboolean valid;
+    bool player_found = false;
 
     // Find player in tree view
     valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(lobby->player_list_store), &iter);
@@ -140,6 +153,7 @@ static void updatePlayerStatus(LobbyData* lobby, const PlayerStatusUpdate& updat
                           -1);
 
         if (user_id == update.user_id) {
+            player_found = true;
             // If player went offline, remove them from the list
             if (update.status == STATUS_OFFLINE) {
                 gtk_list_store_remove(lobby->player_list_store, &iter);
@@ -151,15 +165,17 @@ static void updatePlayerStatus(LobbyData* lobby, const PlayerStatusUpdate& updat
                                   COL_STATUS_TEXT, getStatusText(update.status),
                                   COL_ELO, update.elo_rating,
                                   -1);
+                std::cout << "[LOBBY] Updated existing player: " << update.display_name << std::endl;
             }
-            return;
+            break;
         }
 
         valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(lobby->player_list_store), &iter);
     }
 
     // Player not found - add them
-    if (update.status != STATUS_OFFLINE) {
+    if (!player_found && update.status != STATUS_OFFLINE) {
+        std::cout << "[LOBBY] Player not in list, adding: " << update.display_name << std::endl;
         gtk_list_store_append(lobby->player_list_store, &iter);
         gtk_list_store_set(lobby->player_list_store, &iter,
                           COL_USER_ID, update.user_id,
@@ -168,6 +184,9 @@ static void updatePlayerStatus(LobbyData* lobby, const PlayerStatusUpdate& updat
                           COL_STATUS, (int)update.status,
                           COL_STATUS_TEXT, getStatusText(update.status),
                           -1);
+        std::cout << "[LOBBY] ✅ Added new player to list: " << update.display_name << std::endl;
+    } else if (!player_found && update.status == STATUS_OFFLINE) {
+        std::cout << "[LOBBY] Skipping offline player (not in list): " << update.display_name << std::endl;
     }
 }
 
@@ -184,7 +203,10 @@ GtkWidget* UIManager::createLobbyScreen() {
     GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
     gtk_widget_set_size_request(header, -1, 60);
     GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
+    #pragma GCC diagnostic pop
     gtk_widget_set_margin_start(header, 20);
     gtk_widget_set_margin_end(header, 20);
 
@@ -235,7 +257,8 @@ GtkWidget* UIManager::createLobbyScreen() {
     gtk_widget_set_size_request(lobby->refresh_btn, 120, 35);
     g_signal_connect(lobby->refresh_btn, "clicked", G_CALLBACK(on_refresh_clicked), lobby);
 
-    lobby->challenge_btn = gtk_button_new_with_label("⚔️  CHALLENGE");
+    // Challenge button - simple text (no emoji) for better readability
+    lobby->challenge_btn = gtk_button_new_with_label("CHALLENGE");
     gtk_widget_set_size_request(lobby->challenge_btn, 150, 35);
     gtk_widget_set_sensitive(lobby->challenge_btn, FALSE);  // Disabled by default
     g_signal_connect(lobby->challenge_btn, "clicked", G_CALLBACK(on_challenge_clicked), lobby);
@@ -306,11 +329,18 @@ GtkWidget* UIManager::createLobbyScreen() {
             UIManager* ui = pair->first;
             PlayerStatusUpdate* update_ptr = pair->second;
 
+            std::cout << "[LOBBY] Player status callback received for: " << update_ptr->display_name 
+                      << " (ID: " << update_ptr->user_id << ")" << std::endl;
+
             LobbyData* lobby_data = static_cast<LobbyData*>(
                 g_object_get_data(G_OBJECT(ui->current_screen), "lobby_data"));
 
             if (lobby_data) {
+                std::cout << "[LOBBY] lobby_data found, updating player status" << std::endl;
                 updatePlayerStatus(lobby_data, *update_ptr);
+            } else {
+                std::cerr << "[LOBBY] WARNING: lobby_data is null! Current screen might not be lobby screen." << std::endl;
+                std::cerr << "[LOBBY] This update will be lost. Player: " << update_ptr->display_name << std::endl;
             }
             delete update_ptr;
             delete pair;
@@ -321,19 +351,40 @@ GtkWidget* UIManager::createLobbyScreen() {
     network->setChallengeReceivedCallback([this](const ChallengeReceived& challenge) {
         // Show challenge dialog on GTK main thread
         g_idle_add(+[](gpointer data) -> gboolean {
-            auto* challenge_ptr = static_cast<ChallengeReceived*>(data);
-            UIManager* ui = static_cast<UIManager*>(g_object_get_data(G_OBJECT(data), "ui"));
+            auto* pair = static_cast<std::pair<UIManager*, ChallengeReceived*>*>(data);
+            UIManager* ui = pair->first;
+            ChallengeReceived* challenge_ptr = pair->second;
 
             if (ui) {
-                ui->showChallengeDialog(challenge_ptr->challenger_name, challenge_ptr->challenger_elo);
+                uint32_t my_id = ui->network->getUserId();
 
-                // Store challenge ID for response
-                g_object_set_data(G_OBJECT(ui->current_screen), "challenge_id",
-                                 GUINT_TO_POINTER(challenge_ptr->challenge_id));
+                // Safety check: only the target (not the challenger) should see the challenge dialog
+                if (my_id == challenge_ptr->challenger_id) {
+                    std::cout << "[LOBBY] Ignoring CHALLENGE_RECEIVED on challenger side (user_id="
+                              << my_id << ", challenge_id=" << challenge_ptr->challenge_id << ")" << std::endl;
+                } else {
+                    std::cout << "[LOBBY] Showing challenge dialog to target user_id=" << my_id
+                              << " from: " << challenge_ptr->challenger_name
+                              << " (challenge_id=" << challenge_ptr->challenge_id << ")" << std::endl;
+
+                    // Store challenge ID even if current_screen is null (for later retrieval)
+                    ui->pending_challenge_id_ = challenge_ptr->challenge_id;
+                    if (ui->current_screen) {
+                        g_object_set_data(G_OBJECT(ui->current_screen), "challenge_id",
+                                         GUINT_TO_POINTER(challenge_ptr->challenge_id));
+                    } else {
+                        std::cerr << "[LOBBY] WARNING: current_screen is null, stored challenge_id in pending_challenge_id_" << std::endl;
+                    }
+
+                    ui->showChallengeDialog(challenge_ptr->challenger_name, challenge_ptr->challenger_elo);
+                }
+            } else {
+                std::cerr << "[LOBBY] WARNING: UIManager is null in challenge callback" << std::endl;
             }
             delete challenge_ptr;
+            delete pair;
             return G_SOURCE_REMOVE;
-        }, new ChallengeReceived(challenge));
+        }, new std::pair<UIManager*, ChallengeReceived*>(this, new ChallengeReceived(challenge)));
     });
 
     network->setMatchStartCallback([this](const MatchStartMessage& match) {
@@ -385,28 +436,147 @@ GtkWidget* UIManager::createLobbyScreen() {
             auto* cb_data = static_cast<CallbackData*>(data);
             UIManager* ui = cb_data->ui;
 
-            if (ui && ui->opponent_board) {
-                std::cout << "[UI] 📍 Move result: ";
-                if (cb_data->msg.result == SHOT_MISS) {
-                    std::cout << "MISS at (" << cb_data->msg.target.row << "," << cb_data->msg.target.col << ")" << std::endl;
-                } else if (cb_data->msg.result == SHOT_HIT) {
-                    std::cout << "HIT at (" << cb_data->msg.target.row << "," << cb_data->msg.target.col << ")!" << std::endl;
-                    ui->hits_count++;
-                } else if (cb_data->msg.result == SHOT_SUNK) {
-                    std::cout << "SUNK ship at (" << cb_data->msg.target.row << "," << cb_data->msg.target.col << ")!" << std::endl;
-                    ui->hits_count++;
+            if (!ui) {
+                delete cb_data;
+                return G_SOURCE_REMOVE;
+            }
+
+            uint32_t current_user_id = ui->network->getUserId();
+            bool is_my_shot = (cb_data->msg.shooter_id == current_user_id);
+
+            int row = static_cast<int>(cb_data->msg.target.row);
+            int col = static_cast<int>(cb_data->msg.target.col);
+
+            std::cout << "[UI] 📍 Move result: ";
+            if (cb_data->msg.result == SHOT_MISS) {
+                std::cout << "MISS at (" << row << "," << col << ")";
+            } else if (cb_data->msg.result == SHOT_HIT) {
+                std::cout << "HIT at (" << row << "," << col << ")!";
+            } else if (cb_data->msg.result == SHOT_SUNK) {
+                std::cout << "SUNK ship at (" << row << "," << col << ")!";
+            }
+            std::cout << " (shooter: " << cb_data->msg.shooter_id << ", is_my_shot: " << is_my_shot << ")" << std::endl;
+
+            // Update the correct board based on who shot
+            if (is_my_shot) {
+                // This is my shot - update opponent's board (what I can see)
+                if (ui->opponent_board) {
+                    // Update cell state directly based on server result (don't use processShot)
+                    // because opponent_board doesn't have ships, so processShot won't work correctly
+                    int row = cb_data->msg.target.row;
+                    int col = cb_data->msg.target.col;
+                    
+                    if (cb_data->msg.result == SHOT_MISS) {
+                        ui->opponent_board->setCell(row, col, CELL_MISS);
+                    } else if (cb_data->msg.result == SHOT_HIT) {
+                        ui->opponent_board->setCell(row, col, CELL_HIT);
+                    } else if (cb_data->msg.result == SHOT_SUNK) {
+                        // Mark the entire sunk ship on opponent_board so the shooter sees the full ship
+                        ui->opponent_board->setCell(row, col, CELL_SUNK);
+
+                        // Infer ship orientation from neighboring hits
+                        bool horizontal = false;
+                        bool vertical = false;
+                        if (col > 0 && ui->opponent_board->getCell(row, col - 1) == CELL_HIT) horizontal = true;
+                        if (col < BOARD_SIZE - 1 && ui->opponent_board->getCell(row, col + 1) == CELL_HIT) horizontal = true;
+                        if (row > 0 && ui->opponent_board->getCell(row - 1, col) == CELL_HIT) vertical = true;
+                        if (row < BOARD_SIZE - 1 && ui->opponent_board->getCell(row + 1, col) == CELL_HIT) vertical = true;
+
+                        if (horizontal || !vertical) {
+                            // Scan left
+                            for (int c = col - 1; c >= 0; --c) {
+                                CellState s = ui->opponent_board->getCell(row, c);
+                                if (s == CELL_HIT) {
+                                    ui->opponent_board->setCell(row, c, CELL_SUNK);
+                                } else {
+                                    break;
+                                }
+                            }
+                            // Scan right
+                            for (int c = col + 1; c < BOARD_SIZE; ++c) {
+                                CellState s = ui->opponent_board->getCell(row, c);
+                                if (s == CELL_HIT) {
+                                    ui->opponent_board->setCell(row, c, CELL_SUNK);
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                        if (vertical || !horizontal) {
+                            // Scan up
+                            for (int r = row - 1; r >= 0; --r) {
+                                CellState s = ui->opponent_board->getCell(r, col);
+                                if (s == CELL_HIT) {
+                                    ui->opponent_board->setCell(r, col, CELL_SUNK);
+                                } else {
+                                    break;
+                                }
+                            }
+                            // Scan down
+                            for (int r = row + 1; r < BOARD_SIZE; ++r) {
+                                CellState s = ui->opponent_board->getCell(r, col);
+                                if (s == CELL_HIT) {
+                                    ui->opponent_board->setCell(r, col, CELL_SUNK);
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Update stats only for my shots
+                    if (cb_data->msg.result == SHOT_HIT || cb_data->msg.result == SHOT_SUNK) {
+                        ui->hits_count++;
+                    }
+                    ui->shots_fired++;
+                    
+                    // Redraw opponent board
+                    if (ui->opponent_board_area) {
+                        gtk_widget_queue_draw(ui->opponent_board_area);
+                    }
                 }
+                
+                // Handle turn logic based on result
+                if (cb_data->msg.result == SHOT_MISS) {
+                    // Missed - turn will switch to opponent
+                    if (ui->fire_button) {
+                        gtk_widget_set_sensitive(ui->fire_button, FALSE);
+                    }
+                    std::cout << "[UI] ⚠️ Missed! Turn will switch to opponent..." << std::endl;
+                } else if (cb_data->msg.result == SHOT_HIT || cb_data->msg.result == SHOT_SUNK) {
+                    // Hit or sunk - I continue my turn!
+                    // Keep fire button enabled (TURN_UPDATE will confirm, but we can enable it now)
+                    if (ui->fire_button) {
+                        gtk_widget_set_sensitive(ui->fire_button, TRUE);
+                    }
+                    std::cout << "[UI] ✅ Hit! Continuing my turn - fire button enabled" << std::endl;
+                }
+            } else {
+                // This is opponent's shot - update my board (where I was hit)
+                if (ui->player_board) {
+                    // Use processShot on player_board because it has ships
+                    ui->player_board->processShot(cb_data->msg.target);
+                    
+                    // Redraw player board to show where opponent hit
+                    if (ui->player_board_area) {
+                        gtk_widget_queue_draw(ui->player_board_area);
+                    }
+                }
+                
+                // If opponent missed, turn will switch to me - wait for TURN_UPDATE
+                if (cb_data->msg.result == SHOT_MISS) {
+                    std::cout << "[UI] 🎯 Opponent missed! Turn will switch to me..." << std::endl;
+                }
+            }
 
-                // Update opponent board cell
-                ui->opponent_board->processShot(cb_data->msg.target);
-
-                // Update stats display
-                ui->shots_fired++;
-                ui->updateGameStats();
-
-                // Redraw boards
-                if (ui->opponent_board_area) {
-                    gtk_widget_queue_draw(ui->opponent_board_area);
+            // Update stats display
+            ui->updateGameStats();
+            
+            // Check for game over
+            if (cb_data->msg.game_over) {
+                std::cout << "[UI] 🏁 Game over! Winner: " << cb_data->msg.winner_id << std::endl;
+                if (ui->fire_button) {
+                    gtk_widget_set_sensitive(ui->fire_button, FALSE);
                 }
             }
 
@@ -428,7 +598,9 @@ GtkWidget* UIManager::createLobbyScreen() {
 
             if (ui) {
                 ui->is_player_turn = (cb_data->msg.current_player_id == ui->network->getUserId());
-                std::cout << "[UI] 🔄 Turn update: " << (ui->is_player_turn ? "YOUR TURN" : "OPPONENT'S TURN") << std::endl;
+                std::cout << "[UI] 🔄 Turn update: current_player=" << cb_data->msg.current_player_id 
+                          << ", my_id=" << ui->network->getUserId()
+                          << ", is_my_turn=" << (ui->is_player_turn ? "YES" : "NO") << std::endl;
 
                 // Update turn indicator
                 if (ui->turn_indicator) {
@@ -437,13 +609,18 @@ GtkWidget* UIManager::createLobbyScreen() {
                 }
 
                 // Enable/disable fire button based on turn
+                // IMPORTANT: Always update based on TURN_UPDATE, this is the source of truth
                 if (ui->fire_button) {
                     gtk_widget_set_sensitive(ui->fire_button, ui->is_player_turn);
+                    std::cout << "[UI] Fire button " << (ui->is_player_turn ? "ENABLED" : "DISABLED") << std::endl;
                 }
 
-                // Start turn timer
+                // Start turn timer only if it's my turn
                 if (ui->is_player_turn) {
                     ui->startTurnTimer(cb_data->msg.time_left);
+                } else {
+                    // Stop timer if it's opponent's turn
+                    ui->stopTurnTimer();
                 }
             }
 

@@ -32,10 +32,19 @@ bool PlayerHandler::handleMessage(ClientConnection* client,
 }
 
 bool PlayerHandler::handlePlayerListRequest(ClientConnection* client, const std::string& payload) {
+    (void)payload;
     std::cout << "[PLAYER_HANDLER] Player list request from client" << std::endl;
 
     // Get list of online players
     std::vector<PlayerInfo_Message> online_players = player_manager_->getOnlinePlayers();
+
+    // Debug: Print all online players
+    std::cout << "[PLAYER_HANDLER] Total online players in manager: " << online_players.size() << std::endl;
+    for (const auto& player : online_players) {
+        std::cout << "[PLAYER_HANDLER]   - Player: " << player.display_name 
+                  << " (ID: " << player.user_id 
+                  << ", Status: " << (int)player.status << ")" << std::endl;
+    }
 
     // Create response
     PlayerListResponse response;
@@ -46,7 +55,7 @@ bool PlayerHandler::handlePlayerListRequest(ClientConnection* client, const std:
         response.players[i] = online_players[i];
     }
 
-    std::cout << "[PLAYER_HANDLER] Sending " << response.count << " players" << std::endl;
+    std::cout << "[PLAYER_HANDLER] Sending " << response.count << " players to client" << std::endl;
 
     // Send response
     MessageHeader response_header;
