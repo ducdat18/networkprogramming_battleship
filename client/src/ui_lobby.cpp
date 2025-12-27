@@ -401,6 +401,22 @@ GtkWidget* UIManager::createLobbyScreen() {
                 std::cout << "[LOBBY] 🎮 Match started! match_id=" << cb_data->match_id << " Transitioning to ship placement..." << std::endl;
                 cb_data->ui->current_match_id = cb_data->match_id;
                 cb_data->ui->waiting_for_match_ready = false;
+
+                // Clear boards for new match
+                if (cb_data->ui->player_board) {
+                    cb_data->ui->player_board->clearBoard();
+                }
+                if (cb_data->ui->opponent_board) {
+                    cb_data->ui->opponent_board->clearBoard();
+                }
+
+                // Reset game stats for new match
+                cb_data->ui->shots_fired = 0;
+                cb_data->ui->hits_count = 0;
+                for (int i = 0; i < NUM_SHIPS; i++) {
+                    cb_data->ui->ships_placed[i] = false;
+                }
+
                 cb_data->ui->showScreen(SCREEN_SHIP_PLACEMENT);
             }
             delete cb_data;
@@ -474,7 +490,10 @@ GtkWidget* UIManager::createLobbyScreen() {
                         // Mark the entire sunk ship on opponent_board so the shooter sees the full ship
                         ui->opponent_board->setCell(row, col, CELL_SUNK);
 
-                        // Infer ship orientation from neighboring hits
+                        // Infer ship orientation and extent from neighboring hits
+                        int min_row = row, max_row = row;
+                        int min_col = col, max_col = col;
+
                         bool horizontal = false;
                         bool vertical = false;
                         if (col > 0 && ui->opponent_board->getCell(row, col - 1) == CELL_HIT) horizontal = true;
@@ -488,6 +507,7 @@ GtkWidget* UIManager::createLobbyScreen() {
                                 CellState s = ui->opponent_board->getCell(row, c);
                                 if (s == CELL_HIT) {
                                     ui->opponent_board->setCell(row, c, CELL_SUNK);
+                                    min_col = c;
                                 } else {
                                     break;
                                 }
@@ -497,6 +517,7 @@ GtkWidget* UIManager::createLobbyScreen() {
                                 CellState s = ui->opponent_board->getCell(row, c);
                                 if (s == CELL_HIT) {
                                     ui->opponent_board->setCell(row, c, CELL_SUNK);
+                                    max_col = c;
                                 } else {
                                     break;
                                 }
@@ -508,6 +529,7 @@ GtkWidget* UIManager::createLobbyScreen() {
                                 CellState s = ui->opponent_board->getCell(r, col);
                                 if (s == CELL_HIT) {
                                     ui->opponent_board->setCell(r, col, CELL_SUNK);
+                                    min_row = r;
                                 } else {
                                     break;
                                 }
@@ -517,10 +539,33 @@ GtkWidget* UIManager::createLobbyScreen() {
                                 CellState s = ui->opponent_board->getCell(r, col);
                                 if (s == CELL_HIT) {
                                     ui->opponent_board->setCell(r, col, CELL_SUNK);
+                                    max_row = r;
                                 } else {
                                     break;
                                 }
                             }
+                        }
+
+                        // Now add the ship object to opponent_board for visual rendering
+                        ShipType ship_type = (ShipType)cb_data->msg.ship_sunk;
+                        Orientation ship_orient = (max_col > min_col) ? HORIZONTAL : VERTICAL;
+                        Coordinate ship_pos;
+                        ship_pos.row = min_row;
+                        ship_pos.col = min_col;
+
+                        // Place the sunk ship on opponent board (this will make it visible)
+                        if (ui->opponent_board->placeShip(ship_type, ship_pos, ship_orient)) {
+                            // Now mark it as sunk by hitting all its cells
+                            int ship_length = getShipLength(ship_type);
+                            for (int i = 0; i < ship_length; i++) {
+                                Coordinate hit_pos;
+                                hit_pos.row = ship_pos.row + (ship_orient == VERTICAL ? i : 0);
+                                hit_pos.col = ship_pos.col + (ship_orient == HORIZONTAL ? i : 0);
+                                ui->opponent_board->processShot(hit_pos); // This will mark ship as sunk
+                            }
+                            std::cout << "[UI] 💀 Revealed sunk " << shipTypeToName(ship_type)
+                                     << " at (" << (int)ship_pos.row << "," << (int)ship_pos.col
+                                     << ") " << (ship_orient == HORIZONTAL ? "HORIZONTAL" : "VERTICAL") << std::endl;
                         }
                     }
                     
@@ -646,6 +691,9 @@ GtkWidget* UIManager::createLobbyScreen() {
                 // Stop turn timer
                 ui->stopTurnTimer();
 
+                // Update ELO in network object (already done in handleMatchEnd, but ensure it's set)
+                // The network object updates elo_rating_ when receiving MATCH_END
+
                 // Determine result from player's perspective
                 GameResult player_result;
                 if (cb_data->msg.winner_id == 0) {
@@ -658,6 +706,10 @@ GtkWidget* UIManager::createLobbyScreen() {
 
                 // Show result dialog
                 ui->showResultDialog(player_result, cb_data->msg.elo_change);
+
+                // After dialog, update lobby display with new ELO
+                // The lobby screen will be shown by showResultDialog -> showScreen(LOBBY)
+                // which will trigger a refresh
             }
 
             delete cb_data;

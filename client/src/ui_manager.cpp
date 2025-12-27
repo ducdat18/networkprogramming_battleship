@@ -138,17 +138,19 @@ void UIManager::initialize(int argc, char* argv[]) {
         "}"
         "label {"
         "   color: #EEDEBA;"
-        "   font-size: 14px;"
+        "   font-size: 17px;" // Tăng từ 14px để dễ đọc hơn
         "}"
         ".title {"
-        "   color: #87CEEB;"
-        "   font-size: 32px;"
+        "   color: #FFD700;" // Vàng sáng hơn
+        "   font-size: 38px;" // Lớn hơn (32px → 38px)
         "   font-weight: bold;"
+        "   text-shadow: 2px 2px 8px rgba(0,0,0,0.9), 0 0 20px #FFD700;" // Glow effect
         "}"
         ".glow-text {"
-        "   color: #059FFD;"
-        "   font-size: 18px;"
+        "   color: #00FFFF;" // Cyan sáng hơn
+        "   font-size: 20px;" // Lớn hơn (18px → 20px)
         "   font-weight: bold;"
+        "   text-shadow: 0 0 15px #00FFFF, 0 0 30px #00FFFF;" // Glow mạnh hơn
         "}"
         "entry {"
         "   background-color: rgba(0, 33, 69, 0.6);"
@@ -298,10 +300,21 @@ void UIManager::initialize(int argc, char* argv[]) {
 }
 
 void UIManager::showScreen(UIScreen screen) {
+    // Stop timers before destroying screen
+    stopTurnTimer();
+
     // Remove current screen
     if (current_screen) {
         gtk_widget_destroy(current_screen);
         current_screen = nullptr;
+
+        // Clear all widget pointers that belonged to the destroyed screen
+        turn_timer_label = nullptr;
+        fire_button = nullptr;
+        status_label = nullptr;
+        player_board_area = nullptr;
+        opponent_board_area = nullptr;
+        ready_battle_button = nullptr;
     }
 
     // Create new screen
@@ -325,7 +338,7 @@ void UIManager::showScreen(UIScreen screen) {
             current_screen = createGameScreen();
             // Start turn timer when game begins
             is_player_turn = true;
-            startTurnTimer(20);
+            startTurnTimer(60); // 60 seconds per turn
             break;
         case SCREEN_REPLAY:
             current_screen = createReplayScreen();
@@ -502,8 +515,8 @@ void UIManager::switchTurn() {
 
     std::cout << (is_player_turn ? " YOUR TURN" : " OPPONENT'S TURN") << std::endl;
 
-    // IMPORTANT: Restart timer for new turn (required by FR-015)
-    startTurnTimer(20);
+    // IMPORTANT: Restart timer for new turn (60 seconds per turn)
+    startTurnTimer(60);
 }
 
 void UIManager::updateGameStats() {
@@ -741,7 +754,7 @@ void on_pause_clicked(GtkButton* /*button*/, gpointer data) {
     gtk_widget_destroy(dialog);
 
     // Resume timer
-    ui->startTurnTimer(ui->turn_time_remaining > 0 ? ui->turn_time_remaining : 20);
+    ui->startTurnTimer(ui->turn_time_remaining > 0 ? ui->turn_time_remaining : 60);
 
     std::cout << "Game resumed" << std::endl;
 }
@@ -873,12 +886,12 @@ bool UIManager::executeFireAtTarget() {
             g_timeout_add(1000, UIManager::botTurnCallback, this);
         } else if (!is_bot_mode) {
             // Start timer for opponent's turn
-            startTurnTimer(20);
+            startTurnTimer(60);
         }
     } else {
         // Hit or sunk - player continues, restart timer
         stopTurnTimer();
-        startTurnTimer(20);
+        startTurnTimer(60);
     }
 
     return true;
@@ -908,7 +921,8 @@ void UIManager::stopTurnTimer() {
         turn_timer_id = 0;
     }
 
-    if (turn_timer_label) {
+    // Safety check: only update label if it still exists
+    if (turn_timer_label && GTK_IS_WIDGET(turn_timer_label)) {
         gtk_label_set_text(GTK_LABEL(turn_timer_label), "TIME: --");
     }
 }
@@ -918,8 +932,8 @@ gboolean UIManager::turnTimerCallback(gpointer data) {
 
     ui->turn_time_remaining--;
 
-    // Update label
-    if (ui->turn_timer_label) {
+    // Update label with safety check
+    if (ui->turn_timer_label && GTK_IS_WIDGET(ui->turn_timer_label)) {
         char buf[32];
         snprintf(buf, sizeof(buf), "TIME: %d s", ui->turn_time_remaining);
         gtk_label_set_text(GTK_LABEL(ui->turn_timer_label), buf);
@@ -948,10 +962,10 @@ void UIManager::onTurnTimerExpired() {
         g_timeout_add(1000, UIManager::botTurnCallback, this);
     } else if (!is_bot_mode) {
         // Start timer for opponent's turn
-        startTurnTimer(20);
+        startTurnTimer(60);
     } else {
         // Player's turn again, start timer
-        startTurnTimer(20);
+        startTurnTimer(60);
     }
 }
 
@@ -1117,44 +1131,88 @@ void UIManager::showInfoDialog(const std::string& title, const std::string& mess
 
 void UIManager::showResultDialog(GameResult result, int elo_change) {
     const char* title;
+    const char* emoji;
     GtkMessageType msg_type;
 
     switch (result) {
         case RESULT_WIN:
-            title = "🎉 VICTORY!";
+            title = "VICTORY!";
+            emoji = "🎉🏆";
             msg_type = GTK_MESSAGE_INFO;
             break;
         case RESULT_LOSS:
-            title = "💀 DEFEAT";
+            title = "DEFEAT";
+            emoji = "💀⚔️";
             msg_type = GTK_MESSAGE_WARNING;
             break;
         case RESULT_DRAW:
         default:
-            title = "⚔️ DRAW";
+            title = "DRAW";
+            emoji = "⚔️🤝";
             msg_type = GTK_MESSAGE_INFO;
             break;
     }
 
-    char message[256];
+    char message[512];
+    int new_elo = network->getEloRating(); // Get updated ELO from network
     if (elo_change > 0) {
-        snprintf(message, sizeof(message), "ELO: +%d", elo_change);
+        snprintf(message, sizeof(message),
+                 "%s\n\n━━━━━━━━━━━━━━━━━━━━━━\n"
+                 "ELO Change: +%d ⬆️\n"
+                 "New ELO: %d\n"
+                 "━━━━━━━━━━━━━━━━━━━━━━",
+                 emoji, elo_change, new_elo);
     } else if (elo_change < 0) {
-        snprintf(message, sizeof(message), "ELO: %d", elo_change);
+        snprintf(message, sizeof(message),
+                 "%s\n\n━━━━━━━━━━━━━━━━━━━━━━\n"
+                 "ELO Change: %d ⬇️\n"
+                 "New ELO: %d\n"
+                 "━━━━━━━━━━━━━━━━━━━━━━",
+                 emoji, elo_change, new_elo);
     } else {
-        snprintf(message, sizeof(message), "No ELO change");
+        snprintf(message, sizeof(message),
+                 "%s\n\n━━━━━━━━━━━━━━━━━━━━━━\n"
+                 "No ELO change\n"
+                 "Current ELO: %d\n"
+                 "━━━━━━━━━━━━━━━━━━━━━━",
+                 emoji, new_elo);
     }
 
-    GtkWidget* dialog = gtk_message_dialog_new(GTK_WINDOW(main_window),
-                                               GTK_DIALOG_DESTROY_WITH_PARENT,
-                                               msg_type,
-                                               GTK_BUTTONS_OK,
-                                               "%s", title);
-    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
-                                             "%s", message);
+    // Create custom dialog for better visibility
+    GtkWidget* dialog = gtk_dialog_new_with_buttons(
+        title,
+        GTK_WINDOW(main_window),
+        GTK_DIALOG_MODAL,
+        "Return to Lobby",
+        GTK_RESPONSE_OK,
+        NULL
+    );
+
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 400, 250);
+
+    GtkWidget* content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_widget_set_margin_start(content_area, 30);
+    gtk_widget_set_margin_end(content_area, 30);
+    gtk_widget_set_margin_top(content_area, 20);
+    gtk_widget_set_margin_bottom(content_area, 20);
+
+    GtkWidget* label = gtk_label_new(message);
+    gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
+
+    // Make text MUCH bigger and bold
+    PangoAttrList* attrs = pango_attr_list_new();
+    pango_attr_list_insert(attrs, pango_attr_weight_new(PANGO_WEIGHT_BOLD));
+    pango_attr_list_insert(attrs, pango_attr_scale_new(1.8));  // 180% size
+    gtk_label_set_attributes(GTK_LABEL(label), attrs);
+    pango_attr_list_unref(attrs);
+
+    gtk_container_add(GTK_CONTAINER(content_area), label);
+    gtk_widget_show_all(dialog);
+
     gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
 
-    // Return to lobby after showing result
+    // Return to lobby after showing result (will show updated ELO)
     showScreen(SCREEN_LOBBY);
 }
 
