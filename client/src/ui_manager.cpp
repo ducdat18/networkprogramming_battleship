@@ -111,61 +111,76 @@ void UIManager::initialize(int argc, char* argv[]) {
     // Keep window decorations for resize/maximize/fullscreen
     gtk_window_set_decorated(GTK_WINDOW(main_window), TRUE);
 
-    // Apply nautical maritime theme
+    // 🎮 RETRO PIXEL THEME - HIGH CONTRAST CGA-Style
     GtkCssProvider* css_provider = gtk_css_provider_new();
     const char* css_data =
         "window {"
-        "   background: linear-gradient(180deg, #004F6B 0%, #002145 100%);"
+        "   background: #000000;"  /* Pure black for max contrast */
         "}"
         "button {"
-        "   background: linear-gradient(to bottom, #2E8AB0, #059FFD);"
-        "   color: white;"
-        "   border: 2px solid #87CEEB;"
-        "   border-radius: 8px;"
-        "   padding: 12px 24px;"
+        "   background: #1a1a1a;"  /* Dark gray */
+        "   color: #FFFFFF;"       /* BRIGHT WHITE - high contrast */
+        "   border: 3px solid #00FFFF;"  /* Bright cyan border */
+        "   border-radius: 0px;"   /* Square corners - pixel style */
+        "   padding: 10px 20px;"
+        "   font-family: 'DejaVu Sans Mono', monospace;"
         "   font-weight: bold;"
         "   font-size: 14px;"
+        "   box-shadow: 4px 4px 0px #00FFFF;"  /* Cyan pixel shadow */
         "}"
         "button:hover {"
-        "   background: linear-gradient(to bottom, #059FFD, #87CEEB);"
-        "   border-color: #EEDEBA;"
+        "   background: #333333;"
+        "   color: #FFFF00;"       /* BRIGHT YELLOW on hover */
+        "   border-color: #FFFF00;"
+        "   box-shadow: 5px 5px 0px #FFFF00;"
         "}"
         "button:disabled {"
-        "   background: linear-gradient(to bottom, #555555, #333333);"
-        "   color: #888888;"
-        "   border-color: #444444;"
-        "   opacity: 0.6;"
+        "   background: #0a0a0a;"
+        "   color: #555555;"       /* Darker gray for disabled */
+        "   border-color: #333333;"
+        "   box-shadow: 2px 2px 0px #333333;"
         "}"
         "label {"
-        "   color: #EEDEBA;"
-        "   font-size: 17px;" // Tăng từ 14px để dễ đọc hơn
+        "   color: #FFFFFF;"       /* BRIGHT WHITE - max contrast */
+        "   font-family: 'DejaVu Sans Mono', monospace;"
+        "   font-size: 14px;"
         "}"
         ".title {"
-        "   color: #FFD700;" // Vàng sáng hơn
-        "   font-size: 38px;" // Lớn hơn (32px → 38px)
+        "   color: #FFFF00;"       /* BRIGHT YELLOW - retro title */
+        "   font-family: 'DejaVu Sans Mono', monospace;"
+        "   font-size: 36px;"
         "   font-weight: bold;"
-        "   text-shadow: 2px 2px 8px rgba(0,0,0,0.9), 0 0 20px #FFD700;" // Glow effect
+        "   text-shadow: 4px 4px 0px #FF00FF;"  /* Magenta shadow */
         "}"
         ".glow-text {"
-        "   color: #00FFFF;" // Cyan sáng hơn
-        "   font-size: 20px;" // Lớn hơn (18px → 20px)
+        "   color: #00FFFF;"       /* BRIGHT CYAN - accent */
+        "   font-family: 'DejaVu Sans Mono', monospace;"
+        "   font-size: 16px;"
         "   font-weight: bold;"
-        "   text-shadow: 0 0 15px #00FFFF, 0 0 30px #00FFFF;" // Glow mạnh hơn
         "}"
         "entry {"
-        "   background-color: rgba(0, 33, 69, 0.6);"
-        "   color: #EEDEBA;"
-        "   border: 2px solid #2E8AB0;"
-        "   border-radius: 6px;"
+        "   background: #0a0a0a;"
+        "   color: #FFFFFF;"       /* BRIGHT WHITE text */
+        "   border: 3px solid #00FFFF;"
+        "   border-radius: 0px;"
         "   padding: 10px;"
+        "   font-family: 'DejaVu Sans Mono', monospace;"
+        "   font-size: 14px;"
+        "}"
+        "entry:focus {"
+        "   border-color: #FFFF00;"  /* Yellow on focus */
         "}"
         ".danger {"
-        "   background: linear-gradient(to bottom, #D93D1C, #A52A0C);"
-        "   border-color: #FF7F50;"
+        "   background: #660000;"  /* Dark red bg */
+        "   color: #FFFFFF;"       /* White text */
+        "   border-color: #FF0000;" /* BRIGHT RED border */
+        "   box-shadow: 4px 4px 0px #FF0000;"
         "}"
         ".secondary {"
-        "   background: linear-gradient(to bottom, #737A85, #40454D);"
-        "   border-color: #ABD6E6;"
+        "   background: #1a1a1a;"
+        "   color: #00FFFF;"       /* Cyan text */
+        "   border-color: #00FFFF;"
+        "   box-shadow: 4px 4px 0px #00FFFF;"
         "}";
 
     gtk_css_provider_load_from_data(css_provider, css_data, -1, NULL);
@@ -280,11 +295,12 @@ void UIManager::initialize(int argc, char* argv[]) {
     }
 
     // Start animation timer AFTER window is fully shown
+    // OPTIMIZED: 200ms interval (5 FPS) instead of 100ms to reduce CPU usage
     g_idle_add(+[](gpointer data) -> gboolean {
         UIManager* ui = static_cast<UIManager*>(data);
         if (ui->animation_timer_id == 0) {
-            std::cout << "TIME: Starting animation timer (delayed)..." << std::endl;
-            ui->animation_timer_id = g_timeout_add(100, animationCallback, ui);
+            std::cout << "TIME: Starting animation timer (200ms interval)..." << std::endl;
+            ui->animation_timer_id = g_timeout_add(200, animationCallback, ui);
         }
         // Ensure cursor visibility again after window is realized
         GdkWindow* gdk_win = gtk_widget_get_window(ui->main_window);
@@ -321,30 +337,40 @@ void UIManager::showScreen(UIScreen screen) {
     switch (screen) {
         case SCREEN_MAIN_MENU:
             current_screen = createMainMenuScreen();
+            AudioManager::getInstance().playBackgroundMusic();
             break;
         case SCREEN_LOGIN:
             current_screen = createLoginScreen();
+            AudioManager::getInstance().stopMusic();
             break;
         case SCREEN_REGISTER:
             current_screen = createRegisterScreen();
+            AudioManager::getInstance().stopMusic();
             break;
         case SCREEN_LOBBY:
             current_screen = createLobbyScreen();
+            std::cout << "[UI] 🎵 Starting funky lobby music..." << std::endl;
+            AudioManager::getInstance().playBackgroundMusic();
             break;
         case SCREEN_SHIP_PLACEMENT:
             current_screen = createShipPlacementScreen();
+            AudioManager::getInstance().stopMusic();
             break;
         case SCREEN_GAME:
             current_screen = createGameScreen();
             // Start turn timer when game begins
             is_player_turn = true;
-            startTurnTimer(60); // 60 seconds per turn
+            startTurnTimer(20); // 20 seconds per turn
+            std::cout << "[UI] 🎮 Starting intense battle music..." << std::endl;
+            AudioManager::getInstance().playGameMusic();
             break;
         case SCREEN_REPLAY:
             current_screen = createReplayScreen();
+            AudioManager::getInstance().stopMusic();
             break;
         case SCREEN_PROFILE:
             current_screen = createProfileScreen();
+            AudioManager::getInstance().stopMusic();
             break;
     }
 
@@ -379,11 +405,16 @@ void UIManager::updateAnimations() {
         animation_manager->update();
     }
 
-    // Redraw boards for wave animation (only if they exist AND are realized)
-    if (player_board_area && GTK_IS_WIDGET(player_board_area) && gtk_widget_get_realized(player_board_area)) {
+    // Redraw boards for wave animation (SAFE: check widget validity before queuing)
+    // Only redraw if widget exists, is valid GTK widget, is realized, and has a window
+    if (player_board_area && GTK_IS_WIDGET(player_board_area) &&
+        gtk_widget_get_realized(player_board_area) &&
+        gtk_widget_get_window(player_board_area)) {
         gtk_widget_queue_draw(player_board_area);
     }
-    if (opponent_board_area && GTK_IS_WIDGET(opponent_board_area) && gtk_widget_get_realized(opponent_board_area)) {
+    if (opponent_board_area && GTK_IS_WIDGET(opponent_board_area) &&
+        gtk_widget_get_realized(opponent_board_area) &&
+        gtk_widget_get_window(opponent_board_area)) {
         gtk_widget_queue_draw(opponent_board_area);
     }
 }
@@ -394,6 +425,40 @@ void UIManager::run() {
 
 void UIManager::quit() {
     gtk_main_quit();
+}
+
+void UIManager::resignMatch() {
+    std::cout << "[UI] 🏳️ Player is resigning match..." << std::endl;
+
+    // Stop music and play defeat sound
+    AudioManager::getInstance().stopMusic();
+    AudioManager::getInstance().playDefeatMusic();
+
+    // Send RESIGN message to server if in multiplayer mode
+    if (network && network->isConnected() && current_match_id > 0) {
+        std::cout << "[UI] Sending RESIGN message to server (match_id=" << current_match_id << ")" << std::endl;
+        network->sendResign(current_match_id);
+
+        // Show surrender notification
+        showNotification(
+            "╔═══════════════════════════════╗\n"
+            "║  🏳️  YOU SURRENDERED  🏳️       ║\n"
+            "╠═══════════════════════════════╣\n"
+            "║                               ║\n"
+            "║   You have forfeited the      ║\n"
+            "║   match and accepted          ║\n"
+            "║   defeat.                     ║\n"
+            "║                               ║\n"
+            "║   Returning to lobby...       ║\n"
+            "║                               ║\n"
+            "╚═══════════════════════════════╝"
+        );
+
+        // Return to lobby after notification
+        showScreen(SCREEN_LOBBY);
+    } else {
+        std::cout << "[UI] Not in multiplayer match, cannot resign" << std::endl;
+    }
 }
 
 void UIManager::makeDraggable(GtkWidget* widget, GtkWidget* /*window*/) {
@@ -415,34 +480,128 @@ void UIManager::showErrorDialog(const std::string& message) {
 }
 
 void UIManager::showNotification(const std::string& message) {
-    // Check if this is a victory/defeat message
+    // Play notification sound
+    AudioManager::getInstance().playBeep();
+
+    // Check if this is a victory/defeat message - Enhanced Pixel Art
     if (message.find("VICTORY") != std::string::npos || message.find("DEFEAT") != std::string::npos) {
-        GtkWidget* dialog = gtk_dialog_new_with_buttons(
-            message.find("VICTORY") != std::string::npos ? "VICTORY!" : "DEFEAT",
-            GTK_WINDOW(main_window),
-            GTK_DIALOG_MODAL,
-            "BACK TO MENU", GTK_RESPONSE_CANCEL,
-            "REMATCH", GTK_RESPONSE_OK,
-            NULL
-        );
+        bool is_victory = message.find("VICTORY") != std::string::npos;
+
+        // Play victory or defeat music
+        if (is_victory) {
+            std::cout << "[UI] 🎉 Playing victory fanfare!" << std::endl;
+            AudioManager::getInstance().playVictoryMusic();
+        } else {
+            std::cout << "[UI] 💔 Playing defeat music..." << std::endl;
+            AudioManager::getInstance().playDefeatMusic();
+        }
+
+        // Create beautiful pixel art dialog
+        GtkWidget* dialog = gtk_dialog_new();
+        gtk_window_set_title(GTK_WINDOW(dialog), is_victory ? "VICTORY" : "DEFEAT");
+        gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(main_window));
+        gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+        gtk_window_set_default_size(GTK_WINDOW(dialog), 600, 400);
+
+        // Pure black background
+        GdkRGBA bg = {0.0, 0.0, 0.0, 1.0};
+        gtk_widget_override_background_color(dialog, GTK_STATE_FLAG_NORMAL, &bg);
 
         GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-        GtkWidget* label = gtk_label_new(message.c_str());
-        gtk_widget_set_margin_start(label, 20);
-        gtk_widget_set_margin_end(label, 20);
-        gtk_widget_set_margin_top(label, 20);
-        gtk_widget_set_margin_bottom(label, 20);
-        gtk_container_add(GTK_CONTAINER(content), label);
-        gtk_widget_show_all(content);
+        gtk_widget_override_background_color(content, GTK_STATE_FLAG_NORMAL, &bg);
+        gtk_widget_set_margin_start(content, 40);
+        gtk_widget_set_margin_end(content, 40);
+        gtk_widget_set_margin_top(content, 40);
+        gtk_widget_set_margin_bottom(content, 30);
 
+        GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 25);
+
+        // Victory or Defeat ASCII Art
+        const char* ascii_art;
+        if (is_victory) {
+            ascii_art =
+                "╔═══════════════════════════════════════╗\n"
+                "║                                       ║\n"
+                "║   ⭐  V I C T O R Y ! ! !  ⭐          ║\n"
+                "║                                       ║\n"
+                "║         🏆  CONGRATULATIONS  🏆       ║\n"
+                "║                                       ║\n"
+                "║   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄      ║\n"
+                "║   ███████╗ ██╗    ██╗██╗███╗   ██╗   ║\n"
+                "║   ██╔════╝ ██║    ██║██║████╗  ██║   ║\n"
+                "║   █████╗   ██║ █╗ ██║██║██╔██╗ ██║   ║\n"
+                "║   ██╔══╝   ██║███╗██║██║██║╚██╗██║   ║\n"
+                "║   ███████╗ ╚███╔███╔╝██║██║ ╚████║   ║\n"
+                "║   ╚══════╝  ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝   ║\n"
+                "║   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀      ║\n"
+                "║                                       ║\n"
+                "║    All enemy ships destroyed!         ║\n"
+                "║                                       ║\n"
+                "╚═══════════════════════════════════════╝";
+        } else {
+            ascii_art =
+                "╔═══════════════════════════════════════╗\n"
+                "║                                       ║\n"
+                "║   ⚠️   D E F E A T . . .   ⚠️          ║\n"
+                "║                                       ║\n"
+                "║         💔  GAME  OVER  💔            ║\n"
+                "║                                       ║\n"
+                "║   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄      ║\n"
+                "║   ██╗      ██████╗ ███████╗███████╗  ║\n"
+                "║   ██║     ██╔═══██╗██╔════╝██╔════╝  ║\n"
+                "║   ██║     ██║   ██║███████╗█████╗    ║\n"
+                "║   ██║     ██║   ██║╚════██║██╔══╝    ║\n"
+                "║   ███████╗╚██████╔╝███████║███████╗  ║\n"
+                "║   ╚══════╝ ╚═════╝ ╚══════╝╚══════╝  ║\n"
+                "║   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀      ║\n"
+                "║                                       ║\n"
+                "║    All your ships destroyed!          ║\n"
+                "║                                       ║\n"
+                "╚═══════════════════════════════════════╝";
+        }
+
+        GtkWidget* label = gtk_label_new(ascii_art);
+        GtkStyleContext* ctx = gtk_widget_get_style_context(label);
+        gtk_style_context_add_class(ctx, is_victory ? "title" : "glow-text");
+
+        gtk_box_pack_start(GTK_BOX(vbox), label, TRUE, TRUE, 0);
+        gtk_container_add(GTK_CONTAINER(content), vbox);
+
+        // Action buttons
+        GtkWidget* action_area = gtk_dialog_get_action_area(GTK_DIALOG(dialog));
+        gtk_widget_override_background_color(action_area, GTK_STATE_FLAG_NORMAL, &bg);
+        gtk_widget_set_margin_bottom(action_area, 20);
+
+        GtkWidget* btn_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+        gtk_widget_set_halign(btn_box, GTK_ALIGN_CENTER);
+
+        GtkWidget* menu_btn = gtk_button_new_with_label("[ LOBBY ]");
+        gtk_widget_set_size_request(menu_btn, 150, 50);
+        GtkStyleContext* menu_ctx = gtk_widget_get_style_context(menu_btn);
+        gtk_style_context_add_class(menu_ctx, "secondary");
+
+        GtkWidget* rematch_btn = gtk_button_new_with_label("[ REMATCH ]");
+        gtk_widget_set_size_request(rematch_btn, 150, 50);
+
+        gtk_box_pack_start(GTK_BOX(btn_box), menu_btn, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(btn_box), rematch_btn, FALSE, FALSE, 0);
+        gtk_container_add(GTK_CONTAINER(action_area), btn_box);
+
+        g_signal_connect(menu_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer d) {
+            gtk_dialog_response(GTK_DIALOG(d), GTK_RESPONSE_CANCEL);
+        }), dialog);
+
+        g_signal_connect(rematch_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer d) {
+            gtk_dialog_response(GTK_DIALOG(d), GTK_RESPONSE_OK);
+        }), dialog);
+
+        gtk_widget_show_all(dialog);
         gint response = gtk_dialog_run(GTK_DIALOG(dialog));
         gtk_widget_destroy(dialog);
 
         if (response == GTK_RESPONSE_CANCEL) {
-            // Back to menu
-            showScreen(SCREEN_MAIN_MENU);
+            showScreen(SCREEN_LOBBY);
         } else if (response == GTK_RESPONSE_OK) {
-            // Rematch - reset boards and go to ship placement
             if (player_board) player_board->clearBoard();
             if (opponent_board) {
                 opponent_board->clearBoard();
@@ -457,14 +616,43 @@ void UIManager::showNotification(const std::string& message) {
             showScreen(SCREEN_SHIP_PLACEMENT);
         }
     } else {
-        // Normal notification
-        GtkWidget* dialog = gtk_message_dialog_new(
-            GTK_WINDOW(main_window),
-            GTK_DIALOG_MODAL,
-            GTK_MESSAGE_INFO,
-            GTK_BUTTONS_OK,
-            "%s", message.c_str()
-        );
+        // Enhanced normal notification with pixel art
+        GtkWidget* dialog = gtk_dialog_new();
+        gtk_window_set_title(GTK_WINDOW(dialog), "NOTIFICATION");
+        gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(main_window));
+        gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+        gtk_window_set_default_size(GTK_WINDOW(dialog), 450, 250);
+
+        GdkRGBA bg = {0.0, 0.0, 0.0, 1.0};
+        gtk_widget_override_background_color(dialog, GTK_STATE_FLAG_NORMAL, &bg);
+
+        GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+        gtk_widget_override_background_color(content, GTK_STATE_FLAG_NORMAL, &bg);
+        gtk_widget_set_margin_start(content, 30);
+        gtk_widget_set_margin_end(content, 30);
+        gtk_widget_set_margin_top(content, 30);
+        gtk_widget_set_margin_bottom(content, 20);
+
+        GtkWidget* label = gtk_label_new(message.c_str());
+        GtkStyleContext* ctx = gtk_widget_get_style_context(label);
+        gtk_style_context_add_class(ctx, "glow-text");
+        gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+        gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
+
+        gtk_container_add(GTK_CONTAINER(content), label);
+
+        GtkWidget* action_area = gtk_dialog_get_action_area(GTK_DIALOG(dialog));
+        gtk_widget_override_background_color(action_area, GTK_STATE_FLAG_NORMAL, &bg);
+
+        GtkWidget* ok_btn = gtk_button_new_with_label("[ OK ]");
+        gtk_widget_set_size_request(ok_btn, 120, 40);
+        gtk_container_add(GTK_CONTAINER(action_area), ok_btn);
+
+        g_signal_connect(ok_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer d) {
+            gtk_dialog_response(GTK_DIALOG(d), GTK_RESPONSE_OK);
+        }), dialog);
+
+        gtk_widget_show_all(dialog);
         gtk_dialog_run(GTK_DIALOG(dialog));
         gtk_widget_destroy(dialog);
     }
@@ -488,15 +676,15 @@ void UIManager::addChatMessage(const std::string& sender, const std::string& mes
 void UIManager::updateTurnIndicator(bool is_player_turn) {
     if (turn_indicator) {
         gtk_label_set_text(GTK_LABEL(turn_indicator),
-                          is_player_turn ? " YOUR TURN" : " OPPONENT'S TURN");
+                          is_player_turn ? ">> YOUR TURN <<" : ">> OPPONENT TURN <<");
     }
 }
 
 void UIManager::updateTimer(int seconds_remaining) {
     if (timer_label) {
         char time_str[32];
-        snprintf(time_str, sizeof(time_str), "TIME: %02d:%02d",
-                seconds_remaining / 60, seconds_remaining % 60);
+        snprintf(time_str, sizeof(time_str), "[ TIME: %ds ]",
+                seconds_remaining);
         gtk_label_set_text(GTK_LABEL(timer_label), time_str);
     }
 }
@@ -507,35 +695,35 @@ void UIManager::switchTurn() {
 
     if (turn_indicator) {
         if (is_player_turn) {
-            gtk_label_set_text(GTK_LABEL(turn_indicator), " YOUR TURN ");
+            gtk_label_set_text(GTK_LABEL(turn_indicator), ">> YOUR TURN <<");
         } else {
-            gtk_label_set_text(GTK_LABEL(turn_indicator), " OPPONENT'S TURN ");
+            gtk_label_set_text(GTK_LABEL(turn_indicator), ">> OPPONENT TURN <<");
         }
     }
 
-    std::cout << (is_player_turn ? " YOUR TURN" : " OPPONENT'S TURN") << std::endl;
+    std::cout << (is_player_turn ? ">> YOUR TURN" : ">> OPPONENT TURN") << std::endl;
 
-    // IMPORTANT: Restart timer for new turn (60 seconds per turn)
-    startTurnTimer(60);
+    // IMPORTANT: Restart timer for new turn (20 seconds per turn)
+    startTurnTimer(20);
 }
 
 void UIManager::updateGameStats() {
     if (shots_label_widget) {
         char buf[32];
-        snprintf(buf, sizeof(buf), "Shots\n%d", shots_fired);
+        snprintf(buf, sizeof(buf), "SHOTS: %d", shots_fired);
         gtk_label_set_text(GTK_LABEL(shots_label_widget), buf);
     }
 
     if (hits_label_widget) {
         char buf[32];
-        snprintf(buf, sizeof(buf), "Hits\n%d", hits_count);
+        snprintf(buf, sizeof(buf), "HITS: %d", hits_count);
         gtk_label_set_text(GTK_LABEL(hits_label_widget), buf);
     }
 
     if (accuracy_label_widget && shots_fired > 0) {
         char buf[32];
         int accuracy = (hits_count * 100) / shots_fired;
-        snprintf(buf, sizeof(buf), "Accuracy\n%d%%", accuracy);
+        snprintf(buf, sizeof(buf), "ACCURACY: %d%%", accuracy);
         gtk_label_set_text(GTK_LABEL(accuracy_label_widget), buf);
     }
 }
@@ -709,14 +897,36 @@ gboolean on_board_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpoint
 
 void on_fire_clicked(GtkButton* /*button*/, gpointer data) {
     UIManager* ui = static_cast<UIManager*>(data);
+
+    // Check if it's player's turn
+    if (!ui->is_player_turn) {
+        std::cout << "[UI] Not your turn!" << std::endl;
+        ui->showNotification(">> NOT YOUR TURN <<\nWait for opponent...");
+        return;
+    }
+
+    // Check if target is selected
+    if (!ui->has_target_selected) {
+        std::cout << "[UI] No target selected!" << std::endl;
+        ui->showNotification(">> SELECT TARGET <<\nClick on enemy grid first!");
+        return;
+    }
+
+    // Execute fire
     if (ui && ui->executeFireAtTarget()) {
-        // Shot was fired successfully
-        if (ui->opponent_board_area) {
+        std::cout << "[UI] Shot fired at (" << ui->selected_target_row
+                  << "," << ui->selected_target_col << ")" << std::endl;
+
+        // Redraw boards
+        if (ui->opponent_board_area && GTK_IS_WIDGET(ui->opponent_board_area)) {
             gtk_widget_queue_draw(ui->opponent_board_area);
         }
-        if (ui->player_board_area) {
+        if (ui->player_board_area && GTK_IS_WIDGET(ui->player_board_area)) {
             gtk_widget_queue_draw(ui->player_board_area);
         }
+    } else {
+        std::cout << "[UI] Fire failed!" << std::endl;
+        ui->showNotification(">> INVALID SHOT <<\nSelect a different cell!");
     }
 }
 
@@ -727,37 +937,7 @@ void on_resign_clicked(GtkButton* /*button*/, gpointer data) {
     }
 }
 
-void on_draw_offer_clicked(GtkButton* /*button*/, gpointer data) {
-    UIManager* ui = static_cast<UIManager*>(data);
-    if (ui->on_draw_offer) {
-        ui->on_draw_offer();
-    }
-}
-
-void on_pause_clicked(GtkButton* /*button*/, gpointer data) {
-    UIManager* ui = static_cast<UIManager*>(data);
-    std::cout << "Pause requested" << std::endl;
-
-    // Show pause dialog (FR-024)
-    GtkWidget* dialog = gtk_message_dialog_new(
-        GTK_WINDOW(ui->main_window),
-        GTK_DIALOG_MODAL,
-        GTK_MESSAGE_INFO,
-        GTK_BUTTONS_OK,
-        "Game Paused\n\nPress OK to resume"
-    );
-
-    // Stop timer while paused
-    ui->stopTurnTimer();
-
-    gtk_dialog_run(GTK_DIALOG(dialog));
-    gtk_widget_destroy(dialog);
-
-    // Resume timer
-    ui->startTurnTimer(ui->turn_time_remaining > 0 ? ui->turn_time_remaining : 60);
-
-    std::cout << "Game resumed" << std::endl;
-}
+// Pause and draw offer removed per user request
 
 // Target selection implementation
 void UIManager::selectTarget(int row, int col) {
@@ -826,22 +1006,29 @@ bool UIManager::executeFireAtTarget() {
     // Update stats
     shots_fired++;
 
+    // Play shot sound
+    AudioManager::getInstance().playShotSound();
+
     // Add animation based on result
     if (result == SHOT_HIT) {
         hits_count++;
         if (animation_manager) {
             animation_manager->addExplosion(row, col);
         }
-        std::cout << "HIT: HIT at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
+        // Play hit sound effect
+        AudioManager::getInstance().playHitSound();
+        std::cout << "💥 HIT at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
     } else if (result == SHOT_SUNK) {
         hits_count++;
         // No explosion animation for sunk ships
-        std::cout << "SUNK: SUNK at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
+        // Play ship sunk sound effect
+        AudioManager::getInstance().playSunkSound();
+        std::cout << "🚢 SUNK at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
     } else {
         if (animation_manager) {
             animation_manager->addSplash(row, col);
         }
-        std::cout << "MISS: MISS at " << (char)('A' + row) << (col + 1) << std::endl;
+        std::cout << "💦 MISS at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
     }
 
     // Handle sunk ship
@@ -886,12 +1073,12 @@ bool UIManager::executeFireAtTarget() {
             g_timeout_add(1000, UIManager::botTurnCallback, this);
         } else if (!is_bot_mode) {
             // Start timer for opponent's turn
-            startTurnTimer(60);
+            startTurnTimer(20);
         }
     } else {
         // Hit or sunk - player continues, restart timer
         stopTurnTimer();
-        startTurnTimer(60);
+        startTurnTimer(20);
     }
 
     return true;
@@ -904,10 +1091,10 @@ void UIManager::startTurnTimer(int seconds) {
 
     turn_time_remaining = seconds;
 
-    // Update label immediately
+    // Update label immediately - PIXEL STYLE
     if (turn_timer_label) {
         char buf[32];
-        snprintf(buf, sizeof(buf), "TIME: %d s", turn_time_remaining);
+        snprintf(buf, sizeof(buf), "[ TIME: %ds ]", turn_time_remaining);
         gtk_label_set_text(GTK_LABEL(turn_timer_label), buf);
     }
 
@@ -932,10 +1119,10 @@ gboolean UIManager::turnTimerCallback(gpointer data) {
 
     ui->turn_time_remaining--;
 
-    // Update label with safety check
+    // Update label with safety check - PIXEL STYLE
     if (ui->turn_timer_label && GTK_IS_WIDGET(ui->turn_timer_label)) {
         char buf[32];
-        snprintf(buf, sizeof(buf), "TIME: %d s", ui->turn_time_remaining);
+        snprintf(buf, sizeof(buf), "[ TIME: %ds ]", ui->turn_time_remaining);
         gtk_label_set_text(GTK_LABEL(ui->turn_timer_label), buf);
     }
 
@@ -962,10 +1149,10 @@ void UIManager::onTurnTimerExpired() {
         g_timeout_add(1000, UIManager::botTurnCallback, this);
     } else if (!is_bot_mode) {
         // Start timer for opponent's turn
-        startTurnTimer(60);
+        startTurnTimer(20);
     } else {
         // Player's turn again, start timer
-        startTurnTimer(60);
+        startTurnTimer(20);
     }
 }
 
@@ -1106,89 +1293,233 @@ void UIManager::handleLogoutResponse(bool success) {
 }
 
 void UIManager::showErrorDialog(const std::string& title, const std::string& message) {
-    GtkWidget* dialog = gtk_message_dialog_new(GTK_WINDOW(main_window),
-                                               GTK_DIALOG_DESTROY_WITH_PARENT,
-                                               GTK_MESSAGE_ERROR,
-                                               GTK_BUTTONS_OK,
-                                               "%s", title.c_str());
-    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
-                                             "%s", message.c_str());
+    // Play error sound
+    AudioManager::getInstance().playErrorSound();
+
+    // Create beautiful error dialog with ASCII art
+    GtkWidget* dialog = gtk_dialog_new();
+    gtk_window_set_title(GTK_WINDOW(dialog), "ERROR");
+    gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(main_window));
+    gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 500, 350);
+
+    // Red-tinted black background
+    GdkRGBA bg = {0.1, 0.0, 0.0, 1.0};
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    gtk_widget_override_background_color(dialog, GTK_STATE_FLAG_NORMAL, &bg);
+    #pragma GCC diagnostic pop
+
+    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_widget_override_background_color(content, GTK_STATE_FLAG_NORMAL, &bg);
+    gtk_widget_set_margin_start(content, 30);
+    gtk_widget_set_margin_end(content, 30);
+    gtk_widget_set_margin_top(content, 30);
+    gtk_widget_set_margin_bottom(content, 20);
+
+    GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
+
+    // Error ASCII art
+    GtkWidget* ascii_label = gtk_label_new(
+        "╔══════════════════════════════════╗\n"
+        "║                                  ║\n"
+        "║     ⚠️  ERROR DETECTED  ⚠️        ║\n"
+        "║                                  ║\n"
+        "║   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄     ║\n"
+        "║   █████╗ ██████╗ ██████╗        ║\n"
+        "║   ██╔══╝ ██╔══██╗██╔══██╗       ║\n"
+        "║   █████╗ ██████╔╝██████╔╝       ║\n"
+        "║   ██╔══╝ ██╔══██╗██╔══██╗       ║\n"
+        "║   █████║ ██║  ██║██║  ██║       ║\n"
+        "║   ╚════╝ ╚═╝  ╚═╝╚═╝  ╚═╝       ║\n"
+        "║   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀     ║\n"
+        "║                                  ║\n"
+        "╚══════════════════════════════════╝"
+    );
+    GtkStyleContext* ascii_ctx = gtk_widget_get_style_context(ascii_label);
+    gtk_style_context_add_class(ascii_ctx, "title");
+
+    // Title and message
+    GtkWidget* title_label = gtk_label_new(title.c_str());
+    GtkStyleContext* title_ctx = gtk_widget_get_style_context(title_label);
+    gtk_style_context_add_class(title_ctx, "glow-text");
+
+    GtkWidget* msg_label = gtk_label_new(message.c_str());
+    gtk_label_set_line_wrap(GTK_LABEL(msg_label), TRUE);
+    gtk_label_set_justify(GTK_LABEL(msg_label), GTK_JUSTIFY_CENTER);
+    GtkStyleContext* msg_ctx = gtk_widget_get_style_context(msg_label);
+    gtk_style_context_add_class(msg_ctx, "glow-text");
+
+    gtk_box_pack_start(GTK_BOX(vbox), ascii_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), title_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), msg_label, TRUE, TRUE, 0);
+    gtk_container_add(GTK_CONTAINER(content), vbox);
+
+    // OK button
+    GtkWidget* action_area = gtk_dialog_get_action_area(GTK_DIALOG(dialog));
+    gtk_widget_override_background_color(action_area, GTK_STATE_FLAG_NORMAL, &bg);
+
+    GtkWidget* ok_btn = gtk_button_new_with_label("[ OK ]");
+    gtk_widget_set_size_request(ok_btn, 120, 40);
+    GtkStyleContext* btn_ctx = gtk_widget_get_style_context(ok_btn);
+    gtk_style_context_add_class(btn_ctx, "danger");
+    gtk_container_add(GTK_CONTAINER(action_area), ok_btn);
+
+    g_signal_connect(ok_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer d) {
+        gtk_dialog_response(GTK_DIALOG(d), GTK_RESPONSE_OK);
+    }), dialog);
+
+    gtk_widget_show_all(dialog);
     gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
 }
 
 void UIManager::showInfoDialog(const std::string& title, const std::string& message) {
-    GtkWidget* dialog = gtk_message_dialog_new(GTK_WINDOW(main_window),
-                                               GTK_DIALOG_DESTROY_WITH_PARENT,
-                                               GTK_MESSAGE_INFO,
-                                               GTK_BUTTONS_OK,
-                                               "%s", title.c_str());
-    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
-                                             "%s", message.c_str());
+    // Play success sound
+    AudioManager::getInstance().playSuccessSound();
+
+    // Create beautiful info dialog with ASCII art
+    GtkWidget* dialog = gtk_dialog_new();
+    gtk_window_set_title(GTK_WINDOW(dialog), "SUCCESS");
+    gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(main_window));
+    gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 500, 350);
+
+    // Green-tinted black background
+    GdkRGBA bg = {0.0, 0.1, 0.0, 1.0};
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    gtk_widget_override_background_color(dialog, GTK_STATE_FLAG_NORMAL, &bg);
+    #pragma GCC diagnostic pop
+
+    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_widget_override_background_color(content, GTK_STATE_FLAG_NORMAL, &bg);
+    gtk_widget_set_margin_start(content, 30);
+    gtk_widget_set_margin_end(content, 30);
+    gtk_widget_set_margin_top(content, 30);
+    gtk_widget_set_margin_bottom(content, 20);
+
+    GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
+
+    // Success ASCII art
+    GtkWidget* ascii_label = gtk_label_new(
+        "╔══════════════════════════════════╗\n"
+        "║                                  ║\n"
+        "║    ✅  SUCCESS  ✅                ║\n"
+        "║                                  ║\n"
+        "║   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄     ║\n"
+        "║    ██████╗ ██╗  ██╗              ║\n"
+        "║   ██╔═══██╗██║ ██╔╝              ║\n"
+        "║   ██║   ██║█████╔╝               ║\n"
+        "║   ██║   ██║██╔═██╗               ║\n"
+        "║   ╚██████╔╝██║  ██╗              ║\n"
+        "║    ╚═════╝ ╚═╝  ╚═╝              ║\n"
+        "║   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀     ║\n"
+        "║                                  ║\n"
+        "╚══════════════════════════════════╝"
+    );
+    GtkStyleContext* ascii_ctx = gtk_widget_get_style_context(ascii_label);
+    gtk_style_context_add_class(ascii_ctx, "title");
+
+    // Title and message
+    GtkWidget* title_label = gtk_label_new(title.c_str());
+    GtkStyleContext* title_ctx = gtk_widget_get_style_context(title_label);
+    gtk_style_context_add_class(title_ctx, "glow-text");
+
+    GtkWidget* msg_label = gtk_label_new(message.c_str());
+    gtk_label_set_line_wrap(GTK_LABEL(msg_label), TRUE);
+    gtk_label_set_justify(GTK_LABEL(msg_label), GTK_JUSTIFY_CENTER);
+    GtkStyleContext* msg_ctx = gtk_widget_get_style_context(msg_label);
+    gtk_style_context_add_class(msg_ctx, "glow-text");
+
+    gtk_box_pack_start(GTK_BOX(vbox), ascii_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), title_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), msg_label, TRUE, TRUE, 0);
+    gtk_container_add(GTK_CONTAINER(content), vbox);
+
+    // OK button
+    GtkWidget* action_area = gtk_dialog_get_action_area(GTK_DIALOG(dialog));
+    gtk_widget_override_background_color(action_area, GTK_STATE_FLAG_NORMAL, &bg);
+
+    GtkWidget* ok_btn = gtk_button_new_with_label("[ OK ]");
+    gtk_widget_set_size_request(ok_btn, 120, 40);
+    gtk_container_add(GTK_CONTAINER(action_area), ok_btn);
+
+    g_signal_connect(ok_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer d) {
+        gtk_dialog_response(GTK_DIALOG(d), GTK_RESPONSE_OK);
+    }), dialog);
+
+    gtk_widget_show_all(dialog);
     gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
 }
 
-void UIManager::showResultDialog(GameResult result, int elo_change) {
+void UIManager::showResultDialog(GameResult result, int elo_change, const char* reason) {
     const char* title;
-    const char* emoji;
-    GtkMessageType msg_type;
+    const char* ascii_art;
 
     switch (result) {
         case RESULT_WIN:
-            title = "VICTORY!";
-            emoji = "🎉🏆";
-            msg_type = GTK_MESSAGE_INFO;
+            title = "╔═══ VICTORY! ═══╗";
+            ascii_art = "*** YOU WIN ***";
             break;
         case RESULT_LOSS:
-            title = "DEFEAT";
-            emoji = "💀⚔️";
-            msg_type = GTK_MESSAGE_WARNING;
+            title = "╔═══ DEFEAT ═══╗";
+            ascii_art = "*** GAME OVER ***";
             break;
         case RESULT_DRAW:
         default:
-            title = "DRAW";
-            emoji = "⚔️🤝";
-            msg_type = GTK_MESSAGE_INFO;
+            title = "╔═══ DRAW ═══╗";
+            ascii_art = "*** STALEMATE ***";
             break;
     }
 
     char message[512];
-    int new_elo = network->getEloRating(); // Get updated ELO from network
+    int new_elo = network->getEloRating();
+    const char* reason_display = reason ? reason : "Match ended";
+
     if (elo_change > 0) {
         snprintf(message, sizeof(message),
-                 "%s\n\n━━━━━━━━━━━━━━━━━━━━━━\n"
-                 "ELO Change: +%d ⬆️\n"
-                 "New ELO: %d\n"
-                 "━━━━━━━━━━━━━━━━━━━━━━",
-                 emoji, elo_change, new_elo);
+                 "%s\n\n"
+                 "%s\n\n"
+                 "═════════════════════\n"
+                 "ELO CHANGE: +%d\n"
+                 "NEW ELO: %d\n"
+                 "═════════════════════",
+                 ascii_art, reason_display, elo_change, new_elo);
     } else if (elo_change < 0) {
         snprintf(message, sizeof(message),
-                 "%s\n\n━━━━━━━━━━━━━━━━━━━━━━\n"
-                 "ELO Change: %d ⬇️\n"
-                 "New ELO: %d\n"
-                 "━━━━━━━━━━━━━━━━━━━━━━",
-                 emoji, elo_change, new_elo);
+                 "%s\n\n"
+                 "%s\n\n"
+                 "═════════════════════\n"
+                 "ELO CHANGE: %d\n"
+                 "NEW ELO: %d\n"
+                 "═════════════════════",
+                 ascii_art, reason_display, elo_change, new_elo);
     } else {
         snprintf(message, sizeof(message),
-                 "%s\n\n━━━━━━━━━━━━━━━━━━━━━━\n"
-                 "No ELO change\n"
-                 "Current ELO: %d\n"
-                 "━━━━━━━━━━━━━━━━━━━━━━",
-                 emoji, new_elo);
+                 "%s\n\n"
+                 "%s\n\n"
+                 "═════════════════════\n"
+                 "NO ELO CHANGE\n"
+                 "CURRENT ELO: %d\n"
+                 "═════════════════════",
+                 ascii_art, reason_display, new_elo);
     }
 
-    // Create custom dialog for better visibility
+    // Create dialog with RE-CHALLENGE button - PIXEL STYLE
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
         title,
         GTK_WINDOW(main_window),
         GTK_DIALOG_MODAL,
-        "Return to Lobby",
-        GTK_RESPONSE_OK,
+        "[ LOBBY ]",
+        GTK_RESPONSE_CANCEL,
+        "[ RE-CHALLENGE ]",
+        GTK_RESPONSE_ACCEPT,
         NULL
     );
 
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 400, 250);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 450, 280);
 
     GtkWidget* content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     gtk_widget_set_margin_start(content_area, 30);
@@ -1199,71 +1530,121 @@ void UIManager::showResultDialog(GameResult result, int elo_change) {
     GtkWidget* label = gtk_label_new(message);
     gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
 
-    // Make text MUCH bigger and bold
+    // PIXEL STYLE: Bigger, bold, monospace
     PangoAttrList* attrs = pango_attr_list_new();
     pango_attr_list_insert(attrs, pango_attr_weight_new(PANGO_WEIGHT_BOLD));
-    pango_attr_list_insert(attrs, pango_attr_scale_new(1.8));  // 180% size
+    pango_attr_list_insert(attrs, pango_attr_scale_new(1.6));
+    pango_attr_list_insert(attrs, pango_attr_family_new("monospace"));
     gtk_label_set_attributes(GTK_LABEL(label), attrs);
     pango_attr_list_unref(attrs);
 
     gtk_container_add(GTK_CONTAINER(content_area), label);
     gtk_widget_show_all(dialog);
 
-    gtk_dialog_run(GTK_DIALOG(dialog));
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
 
-    // Return to lobby after showing result (will show updated ELO)
-    showScreen(SCREEN_LOBBY);
+    if (response == GTK_RESPONSE_ACCEPT) {
+        // RE-CHALLENGE - send challenge request to same opponent
+        // TODO: Implement re-challenge logic with server
+        std::cout << "[UI] Re-challenge requested!" << std::endl;
+        showNotification("Re-challenge feature coming soon!");
+        showScreen(SCREEN_LOBBY);
+    } else {
+        // Return to lobby
+        showScreen(SCREEN_LOBBY);
+    }
 }
 
 void UIManager::showChallengeDialog(const std::string& opponent_name, int opponent_elo) {
-    // Create custom dialog
-    GtkWidget* dialog = gtk_dialog_new_with_buttons("Challenge Received!",
-                                                     GTK_WINDOW(main_window),
-                                                     GTK_DIALOG_MODAL,
-                                                     "DECLINE", GTK_RESPONSE_REJECT,
-                                                     "ACCEPT", GTK_RESPONSE_ACCEPT,
-                                                     NULL);
+    // Create custom dialog - Pixel style with proper background
+    GtkWidget* dialog = gtk_dialog_new();
+    gtk_window_set_title(GTK_WINDOW(dialog), "CHALLENGE");
+    gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(main_window));
+    gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
 
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 400, 200);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 500, 300);
+    gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
 
-    // Content area
+    // Set pure black background for dialog
+    GdkRGBA dialog_bg = {0.0, 0.0, 0.0, 1.0};
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    gtk_widget_override_background_color(dialog, GTK_STATE_FLAG_NORMAL, &dialog_bg);
+    #pragma GCC diagnostic pop
+
+    // Content area with black background
     GtkWidget* content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gtk_widget_set_margin_start(content_area, 20);
-    gtk_widget_set_margin_end(content_area, 20);
-    gtk_widget_set_margin_top(content_area, 20);
+    gtk_widget_override_background_color(content_area, GTK_STATE_FLAG_NORMAL, &dialog_bg);
+    gtk_widget_set_margin_start(content_area, 30);
+    gtk_widget_set_margin_end(content_area, 30);
+    gtk_widget_set_margin_top(content_area, 30);
     gtk_widget_set_margin_bottom(content_area, 20);
 
-    GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 15);
+    GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
 
-    // Title
-    GtkWidget* title_label = gtk_label_new("⚔️  CHALLENGE RECEIVED!");
-    PangoAttrList* attrs = pango_attr_list_new();
-    pango_attr_list_insert(attrs, pango_attr_weight_new(PANGO_WEIGHT_BOLD));
-    pango_attr_list_insert(attrs, pango_attr_scale_new(1.5));
-    gtk_label_set_attributes(GTK_LABEL(title_label), attrs);
-    pango_attr_list_unref(attrs);
+    // ASCII Art Title
+    GtkWidget* title_label = gtk_label_new(
+        "╔═══════════════════════════╗\n"
+        "║  >> INCOMING CHALLENGE << ║\n"
+        "╚═══════════════════════════╝"
+    );
+    GtkStyleContext* title_context = gtk_widget_get_style_context(title_label);
+    gtk_style_context_add_class(title_context, "title");
 
-    // Opponent info
+    // Opponent info - bright white text
     char opponent_text[256];
     snprintf(opponent_text, sizeof(opponent_text),
-             "%s (ELO: %d) has challenged you to a battle!",
+             "\n< %s >\nELO: %d\n\nwants to battle!",
              opponent_name.c_str(), opponent_elo);
     GtkWidget* opponent_label = gtk_label_new(opponent_text);
-    gtk_label_set_line_wrap(GTK_LABEL(opponent_label), TRUE);
+    GtkStyleContext* opp_context = gtk_widget_get_style_context(opponent_label);
+    gtk_style_context_add_class(opp_context, "glow-text");
+    gtk_label_set_justify(GTK_LABEL(opponent_label), GTK_JUSTIFY_CENTER);
 
-    // Warning
-    GtkWidget* warning_label = gtk_label_new("Do you accept?");
-    PangoAttrList* warning_attrs = pango_attr_list_new();
-    pango_attr_list_insert(warning_attrs, pango_attr_style_new(PANGO_STYLE_ITALIC));
-    gtk_label_set_attributes(GTK_LABEL(warning_label), warning_attrs);
-    pango_attr_list_unref(warning_attrs);
+    // Prompt - cyan text
+    GtkWidget* warning_label = gtk_label_new("\n>> Do you accept the challenge? <<");
+    GtkStyleContext* warn_context = gtk_widget_get_style_context(warning_label);
+    gtk_style_context_add_class(warn_context, "glow-text");
 
     gtk_box_pack_start(GTK_BOX(vbox), title_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(vbox), opponent_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), opponent_label, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), warning_label, FALSE, FALSE, 0);
 
     gtk_container_add(GTK_CONTAINER(content_area), vbox);
+
+    // Action area - custom buttons with pixel style
+    GtkWidget* action_area = gtk_dialog_get_action_area(GTK_DIALOG(dialog));
+    gtk_widget_override_background_color(action_area, GTK_STATE_FLAG_NORMAL, &dialog_bg);
+    gtk_widget_set_margin_start(action_area, 30);
+    gtk_widget_set_margin_end(action_area, 30);
+    gtk_widget_set_margin_bottom(action_area, 20);
+
+    // Custom button box
+    GtkWidget* button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    gtk_widget_set_halign(button_box, GTK_ALIGN_CENTER);
+
+    GtkWidget* decline_btn = gtk_button_new_with_label("[ DECLINE ]");
+    gtk_widget_set_size_request(decline_btn, 150, 45);
+    GtkStyleContext* decline_context = gtk_widget_get_style_context(decline_btn);
+    gtk_style_context_add_class(decline_context, "danger");
+
+    GtkWidget* accept_btn = gtk_button_new_with_label("[ ACCEPT ]");
+    gtk_widget_set_size_request(accept_btn, 150, 45);
+
+    gtk_box_pack_start(GTK_BOX(button_box), decline_btn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(button_box), accept_btn, FALSE, FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(action_area), button_box);
+
+    // Connect button signals
+    g_signal_connect(decline_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        gtk_dialog_response(GTK_DIALOG(data), GTK_RESPONSE_REJECT);
+    }), dialog);
+
+    g_signal_connect(accept_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        gtk_dialog_response(GTK_DIALOG(data), GTK_RESPONSE_ACCEPT);
+    }), dialog);
+
     gtk_widget_show_all(dialog);
 
     // Run dialog and get response

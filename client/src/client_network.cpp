@@ -1020,7 +1020,8 @@ void ClientNetwork::handleMatchEnd(const std::string& payload) {
     else if (result.result == RESULT_LOSS) std::cout << "LOSS";
     else std::cout << "DRAW";
     std::cout << " winner=" << result.winner_id
-              << " elo_change=" << result.elo_change
+              << " reason=\"" << result.reason_text << "\""
+              << " elo_change=" << (result.elo_change >= 0 ? "+" : "") << result.elo_change
               << " new_elo=" << result.new_elo << std::endl;
 
     // Update local ELO

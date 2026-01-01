@@ -114,19 +114,23 @@ struct MatchEndMessage {
     uint32_t match_id;
     GameResult result;      // WIN, LOSS, DRAW
     uint32_t winner_id;
+    MatchEndReason reason;  // Why match ended
     int32_t elo_change;     // + or - ELO points
     int32_t new_elo;
     uint32_t total_moves;
     uint64_t duration;      // Seconds
+    char reason_text[128];  // Human-readable reason
 
     MatchEndMessage()
         : match_id(0),
           result(RESULT_DRAW),
           winner_id(0),
+          reason(END_NORMAL),
           elo_change(0),
           new_elo(1000),
           total_moves(0),
           duration(0) {
+        std::memset(reason_text, 0, sizeof(reason_text));
     }
 } __attribute__((packed));
 

@@ -190,6 +190,11 @@ static void updatePlayerStatus(LobbyData* lobby, const PlayerStatusUpdate& updat
     }
 }
 
+// Custom deleter for LobbyData (C++ class with new/delete)
+static void lobby_data_destroy(gpointer data) {
+    delete static_cast<LobbyData*>(data);
+}
+
 GtkWidget* UIManager::createLobbyScreen() {
     // Create lobby data (will be freed when screen is destroyed)
     LobbyData* lobby = new LobbyData();
@@ -197,33 +202,35 @@ GtkWidget* UIManager::createLobbyScreen() {
     lobby->selected_user_id = 0;
 
     GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    g_object_set_data_full(G_OBJECT(main_box), "lobby_data", lobby, g_free);
+    g_object_set_data_full(G_OBJECT(main_box), "lobby_data", lobby, lobby_data_destroy);
 
-    // Header
-    GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
-    gtk_widget_set_size_request(header, -1, 60);
-    GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
+    // Header - PURE BLACK PIXEL STYLE
+    GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_size_request(header, -1, 50);
+    GdkRGBA header_bg = {0.0, 0.0, 0.0, 1.0};  // Pure black for max contrast
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
     #pragma GCC diagnostic pop
-    gtk_widget_set_margin_start(header, 20);
-    gtk_widget_set_margin_end(header, 20);
+    gtk_widget_set_margin_start(header, 10);
+    gtk_widget_set_margin_end(header, 10);
+    gtk_widget_set_margin_top(header, 8);
+    gtk_widget_set_margin_bottom(header, 8);
 
-    GtkWidget* title = gtk_label_new("NAVAL COMMAND CENTER");
+    GtkWidget* title = gtk_label_new("╔═══ LOBBY ═══╗");
     GtkStyleContext* title_context = gtk_widget_get_style_context(title);
     gtk_style_context_add_class(title_context, "title");
 
-    // User info label (update with actual user data)
+    // User info label (pixel art style)
     char user_info_text[128];
-    snprintf(user_info_text, sizeof(user_info_text), "%s | ELO: %d",
+    snprintf(user_info_text, sizeof(user_info_text), "< %s > ELO:%d",
              network->getDisplayName().c_str(), network->getEloRating());
     GtkWidget* user_info = gtk_label_new(user_info_text);
     GtkStyleContext* user_context = gtk_widget_get_style_context(user_info);
     gtk_style_context_add_class(user_context, "glow-text");
 
-    GtkWidget* logout_btn = gtk_button_new_with_label("LOGOUT");
-    gtk_widget_set_size_request(logout_btn, 120, 40);
+    GtkWidget* logout_btn = gtk_button_new_with_label("[ EXIT ]");
+    gtk_widget_set_size_request(logout_btn, 100, 36);
     GtkStyleContext* logout_context = gtk_widget_get_style_context(logout_btn);
     gtk_style_context_add_class(logout_context, "danger");
     g_signal_connect(logout_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
@@ -246,20 +253,20 @@ GtkWidget* UIManager::createLobbyScreen() {
     gtk_widget_set_margin_top(content, 20);
     gtk_widget_set_margin_bottom(content, 20);
 
-    // Header with title and buttons
-    GtkWidget* list_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    // Header with title and buttons - PIXEL ART STYLE
+    GtkWidget* list_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
 
-    GtkWidget* players_label = gtk_label_new("🌐 ONLINE ADMIRALS");
+    GtkWidget* players_label = gtk_label_new(">> PLAYERS ONLINE");
     GtkStyleContext* players_context = gtk_widget_get_style_context(players_label);
     gtk_style_context_add_class(players_context, "glow-text");
 
-    lobby->refresh_btn = gtk_button_new_with_label("🔄 REFRESH");
-    gtk_widget_set_size_request(lobby->refresh_btn, 120, 35);
+    lobby->refresh_btn = gtk_button_new_with_label("[ RELOAD ]");
+    gtk_widget_set_size_request(lobby->refresh_btn, 110, 34);
     g_signal_connect(lobby->refresh_btn, "clicked", G_CALLBACK(on_refresh_clicked), lobby);
 
-    // Challenge button - simple text (no emoji) for better readability
-    lobby->challenge_btn = gtk_button_new_with_label("CHALLENGE");
-    gtk_widget_set_size_request(lobby->challenge_btn, 150, 35);
+    // Challenge button - pixel art design
+    lobby->challenge_btn = gtk_button_new_with_label("[ FIGHT! ]");
+    gtk_widget_set_size_request(lobby->challenge_btn, 110, 34);
     gtk_widget_set_sensitive(lobby->challenge_btn, FALSE);  // Disabled by default
     g_signal_connect(lobby->challenge_btn, "clicked", G_CALLBACK(on_challenge_clicked), lobby);
 
@@ -278,16 +285,17 @@ GtkWidget* UIManager::createLobbyScreen() {
     lobby->player_tree_view = GTK_TREE_VIEW(gtk_tree_view_new_with_model(GTK_TREE_MODEL(lobby->player_list_store)));
     g_object_unref(lobby->player_list_store);  // TreeView holds reference
 
-    // Add columns
+    // Add columns - SIMPLIFIED: Clean, minimal headers
     GtkCellRenderer* renderer;
     GtkTreeViewColumn* column;
 
     // Display Name column
     renderer = gtk_cell_renderer_text_new();
-    column = gtk_tree_view_column_new_with_attributes("Admiral", renderer,
+    column = gtk_tree_view_column_new_with_attributes("Player", renderer,
                                                        "text", COL_DISPLAY_NAME,
                                                        NULL);
     gtk_tree_view_column_set_expand(column, TRUE);
+    gtk_tree_view_column_set_min_width(column, 150);
     gtk_tree_view_append_column(lobby->player_tree_view, column);
 
     // ELO column
@@ -295,6 +303,7 @@ GtkWidget* UIManager::createLobbyScreen() {
     column = gtk_tree_view_column_new_with_attributes("ELO", renderer,
                                                        "text", COL_ELO,
                                                        NULL);
+    gtk_tree_view_column_set_min_width(column, 80);
     gtk_tree_view_append_column(lobby->player_tree_view, column);
 
     // Status column
@@ -302,6 +311,7 @@ GtkWidget* UIManager::createLobbyScreen() {
     column = gtk_tree_view_column_new_with_attributes("Status", renderer,
                                                        "text", COL_STATUS_TEXT,
                                                        NULL);
+    gtk_tree_view_column_set_min_width(column, 100);
     gtk_tree_view_append_column(lobby->player_tree_view, column);
 
     // Selection handling
@@ -548,7 +558,9 @@ GtkWidget* UIManager::createLobbyScreen() {
 
                         // Now add the ship object to opponent_board for visual rendering
                         ShipType ship_type = (ShipType)cb_data->msg.ship_sunk;
-                        Orientation ship_orient = (max_col > min_col) ? HORIZONTAL : VERTICAL;
+                        // Determine orientation based on extent in both directions
+                        Orientation ship_orient = (max_col > min_col) ? HORIZONTAL :
+                                                  (max_row > min_row) ? VERTICAL : HORIZONTAL;
                         Coordinate ship_pos;
                         ship_pos.row = min_row;
                         ship_pos.col = min_col;
@@ -704,8 +716,8 @@ GtkWidget* UIManager::createLobbyScreen() {
                     player_result = RESULT_LOSS;
                 }
 
-                // Show result dialog
-                ui->showResultDialog(player_result, cb_data->msg.elo_change);
+                // Show result dialog with reason
+                ui->showResultDialog(player_result, cb_data->msg.elo_change, cb_data->msg.reason_text);
 
                 // After dialog, update lobby display with new ELO
                 // The lobby screen will be shown by showResultDialog -> showScreen(LOBBY)

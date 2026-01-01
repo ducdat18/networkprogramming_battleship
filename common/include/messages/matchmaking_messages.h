@@ -39,7 +39,8 @@ struct PlayerListResponse {
 
     PlayerListResponse()
         : count(0) {
-        std::memset(players, 0, sizeof(players));
+        // Array elements are already default-initialized by PlayerInfo_Message constructor
+        // No need to memset - this would override the constructor behavior
     }
 } __attribute__((packed));
 

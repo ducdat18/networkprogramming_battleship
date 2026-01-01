@@ -25,7 +25,12 @@
       "Bash(find:*)",
       "Bash(make server:*)",
       "Bash(make:*)",
-      "Bash(g++:*)"
+      "Bash(g++:*)",
+      "Bash(grep:*)",
+      "Bash(tee:*)",
+      "Bash(./run_integration_tests.sh:*)",
+      "Bash(dos2unix:*)",
+      "Bash(bash run_integration_tests.sh:*)"
     ],
     "deny": [],
     "ask": []

@@ -322,9 +322,10 @@ void GameplayHandler::handleMove(const MessageHeader& header,
         // Calculate duration
         uint64_t duration = time(nullptr) - match->start_time;
 
-        // Send match end
+        // Send match end with normal completion reason
         sendMatchEnd(msg.match_id, match->player1_id, match->player2_id,
-                    winner_id, match->move_history.size(), duration);
+                    winner_id, END_NORMAL, "All ships destroyed",
+                    match->move_history.size(), duration);
 
         // Update match in database
         db_->endMatch(msg.match_id, winner_id);
@@ -364,10 +365,11 @@ void GameplayHandler::handleResign(const MessageHeader& header,
     // Determine winner (opponent)
     uint32_t winner_id = (user_id == match->player1_id) ? match->player2_id : match->player1_id;
 
-    // End match
+    // End match with resign reason
     uint64_t duration = time(nullptr) - match->start_time;
     sendMatchEnd(msg.match_id, match->player1_id, match->player2_id,
-                winner_id, match->move_history.size(), duration);
+                winner_id, END_RESIGN, "Opponent resigned",
+                match->move_history.size(), duration);
 
     // Update database
     db_->endMatch(msg.match_id, winner_id);
@@ -455,7 +457,8 @@ void GameplayHandler::handleDrawResponse(const MessageHeader& header,
     // End match as draw (winner_id = 0)
     uint64_t duration = time(nullptr) - match->start_time;
     sendMatchEnd(msg.match_id, match->player1_id, match->player2_id,
-                0, match->move_history.size(), duration);
+                0, END_DRAW_AGREED, "Draw agreed by both players",
+                match->move_history.size(), duration);
 
     // Update database (0 = draw)
     db_->endMatch(msg.match_id, 0);
@@ -654,11 +657,15 @@ void GameplayHandler::sendTurnUpdate(uint32_t match_id, uint32_t current_player_
 }
 
 void GameplayHandler::sendMatchEnd(uint32_t match_id, uint32_t player1_id, uint32_t player2_id,
-                                  uint32_t winner_id, uint32_t total_moves, uint64_t duration) {
+                                  uint32_t winner_id, MatchEndReason reason, const char* reason_text,
+                                  uint32_t total_moves, uint64_t duration) {
     // Send to player 1
     MatchEndMessage msg1;
     msg1.match_id = match_id;
     msg1.winner_id = winner_id;
+    msg1.reason = reason;
+    strncpy(msg1.reason_text, reason_text ? reason_text : "", sizeof(msg1.reason_text) - 1);
+    msg1.reason_text[sizeof(msg1.reason_text) - 1] = '\0';
     msg1.total_moves = total_moves;
     msg1.duration = duration;
     // Calculate and apply ELO changes (simple Elo system)
@@ -746,6 +753,63 @@ void GameplayHandler::sendMatchEnd(uint32_t match_id, uint32_t player1_id, uint3
         ClientConnection* p2_conn = player_manager->getClientConnection(player2_id);
         if (p2_conn) {
             server_->sendToClient(p2_conn->getSocketFd(), header, &msg2, sizeof(msg2));
+        }
+    }
+}
+
+void GameplayHandler::handlePlayerDisconnect(uint32_t disconnected_user_id) {
+    std::cout << "[GAMEPLAY] Handling disconnect for user_id=" << disconnected_user_id << std::endl;
+
+    // Find all matches involving this player
+    std::vector<uint32_t> matches_to_end;
+
+    {
+        std::lock_guard<std::mutex> lock(matches_mutex_);
+        for (const auto& pair : active_matches_) {
+            auto match = pair.second;
+            if (match && (match->player1_id == disconnected_user_id || match->player2_id == disconnected_user_id)) {
+                matches_to_end.push_back(pair.first);
+            }
+        }
+    }
+
+    // End each match where this player was involved
+    for (uint32_t match_id : matches_to_end) {
+        auto match = getMatch(match_id);
+        if (!match) continue;
+
+        uint32_t player1_id = match->player1_id;
+        uint32_t player2_id = match->player2_id;
+        uint32_t opponent_id = (player1_id == disconnected_user_id) ? player2_id : player1_id;
+
+        std::cout << "[GAMEPLAY] Match " << match_id << " - Player " << disconnected_user_id
+                  << " disconnected, awarding win to player " << opponent_id << std::endl;
+
+        // Opponent wins, disconnected player loses
+        // Calculate match duration
+        uint64_t duration = 0;
+        if (match->start_time > 0) {
+            duration = time(nullptr) - match->start_time;
+        }
+
+        // Update match in database
+        if (db_) {
+            db_->endMatch(match_id, opponent_id);
+        }
+
+        // Send match end to both players with disconnect reason
+        sendMatchEnd(match_id, player1_id, player2_id, opponent_id,
+                    END_DISCONNECT, "Opponent disconnected",
+                    match->turn_number, duration);
+
+        // Remove match from active matches
+        removeMatch(match_id);
+
+        // Update player statuses back to AVAILABLE
+        auto player_manager = server_->getPlayerManager();
+        if (player_manager) {
+            player_manager->updatePlayerStatus(opponent_id, STATUS_AVAILABLE);
+            // Disconnected player is already being removed by removeClient
         }
     }
 }

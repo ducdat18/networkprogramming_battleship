@@ -334,10 +334,18 @@ void Server::removeClient(int client_fd) {
         }
     }
 
-    // If client was authenticated, remove from player manager and broadcast offline status
+    // If client was authenticated, handle disconnect properly
     if (client && client->isAuthenticated()) {
         uint32_t user_id = client->getUserId();
-        std::cout << "[CLEANUP] Client was authenticated as user_id=" << user_id << ", broadcasting offline status" << std::endl;
+        std::cout << "[CLEANUP] Client was authenticated as user_id=" << user_id << std::endl;
+
+        // End any active matches involving this player
+        if (gameplay_handler_) {
+            gameplay_handler_->handlePlayerDisconnect(user_id);
+        }
+
+        // Remove from player manager and broadcast offline status
+        std::cout << "[CLEANUP] Broadcasting offline status for user_id=" << user_id << std::endl;
         player_manager_->removePlayer(user_id);
     }
 

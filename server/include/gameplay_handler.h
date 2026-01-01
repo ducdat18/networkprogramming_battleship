@@ -64,7 +64,11 @@ public:
                        uint32_t ships_remaining, bool game_over, uint32_t winner_id);
     void sendTurnUpdate(uint32_t match_id, uint32_t current_player_id, uint32_t turn_number);
     void sendMatchEnd(uint32_t match_id, uint32_t player1_id, uint32_t player2_id,
-                     uint32_t winner_id, uint32_t total_moves, uint64_t duration);
+                     uint32_t winner_id, MatchEndReason reason, const char* reason_text,
+                     uint32_t total_moves, uint64_t duration);
+
+    // Handle player disconnect during match
+    void handlePlayerDisconnect(uint32_t disconnected_user_id);
 };
 
 #endif // GAMEPLAY_HANDLER_H

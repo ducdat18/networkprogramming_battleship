@@ -9,34 +9,40 @@ GtkWidget* UIManager::createGameScreen() {
     // Main container
     GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
-    // Header
-    GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
-    gtk_widget_set_margin_start(header, 20);
-    gtk_widget_set_margin_end(header, 20);
-    gtk_widget_set_margin_top(header, 10);
-    gtk_widget_set_margin_bottom(header, 10);
+    // Header - PIXEL STYLE with pure black background
+    GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    gtk_widget_set_size_request(header, -1, 50);
+    GdkRGBA header_bg = {0.0, 0.0, 0.0, 1.0};  // Pure black
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
+    #pragma GCC diagnostic pop
+    gtk_widget_set_margin_start(header, 10);
+    gtk_widget_set_margin_end(header, 10);
+    gtk_widget_set_margin_top(header, 8);
+    gtk_widget_set_margin_bottom(header, 8);
 
-    // Logo and title
+    // Logo and title - PIXEL STYLE
     GtkWidget* title_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget* logo_label = gtk_label_new("");
-    gtk_widget_set_name(logo_label, "logo");
-    GtkWidget* title_label = gtk_label_new("BATTLESHIP ONLINE");
+    GtkWidget* logo_label = gtk_label_new("⚓");
+    GtkWidget* title_label = gtk_label_new("[ BATTLE MODE ]");
     GtkStyleContext* title_context = gtk_widget_get_style_context(title_label);
     gtk_style_context_add_class(title_context, "title");
     gtk_box_pack_start(GTK_BOX(title_box), logo_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(title_box), title_label, FALSE, FALSE, 0);
 
-    // User info
-    GtkWidget* user_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
-    GtkWidget* elo_label = gtk_label_new("ELO: 1250");
-    GtkWidget* winrate_label = gtk_label_new("WIN RATE: 68%");
-    GtkWidget* username_label = gtk_label_new("Player_001");
+    // User info - BRIGHT COLORS for contrast
+    GtkWidget* user_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
 
-    GtkStyleContext* elo_context = gtk_widget_get_style_context(elo_label);
-    gtk_style_context_add_class(elo_context, "glow-text");
+    // Get actual player data
+    char player_info[256];
+    snprintf(player_info, sizeof(player_info), "< %s > ELO:%d",
+             network->getDisplayName().c_str(),
+             network->getEloRating());
+    GtkWidget* username_label = gtk_label_new(player_info);
+    GtkStyleContext* user_context = gtk_widget_get_style_context(username_label);
+    gtk_style_context_add_class(user_context, "glow-text");
 
-    gtk_box_pack_start(GTK_BOX(user_box), elo_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(user_box), winrate_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(user_box), username_label, FALSE, FALSE, 0);
 
     gtk_box_pack_start(GTK_BOX(header), title_box, FALSE, FALSE, 0);
@@ -48,9 +54,9 @@ GtkWidget* UIManager::createGameScreen() {
     gtk_widget_set_margin_end(content_box, 15);
     gtk_box_set_homogeneous(GTK_BOX(content_box), FALSE);
 
-    // Left panel - Player board
+    // Left panel - Player board - PIXEL STYLE
     GtkWidget* left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    GtkWidget* player_label = gtk_label_new("YOUR FLEET");
+    GtkWidget* player_label = gtk_label_new(">> YOUR FLEET <<");
     GtkStyleContext* player_label_context = gtk_widget_get_style_context(player_label);
     gtk_style_context_add_class(player_label_context, "glow-text");
 
@@ -83,58 +89,58 @@ GtkWidget* UIManager::createGameScreen() {
     gtk_box_pack_start(GTK_BOX(left_panel), player_board_area, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(left_panel), ships_status_label, FALSE, FALSE, 0);
 
-    // Center panel - Match info
+    // Center panel - Match info - PIXEL STYLE
     GtkWidget* center_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_widget_set_size_request(center_panel, 280, -1);
 
-    // Timer
-    timer_label = gtk_label_new("TIME: 00:45");
+    // Timer - BRIGHT YELLOW
+    timer_label = gtk_label_new("[ TIME: 60s ]");
     turn_timer_label = timer_label;  // IMPORTANT: Link turn_timer_label to timer_label for updates!
     GtkStyleContext* timer_context = gtk_widget_get_style_context(timer_label);
     gtk_style_context_add_class(timer_context, "title");
 
-    // Turn indicator
-    turn_indicator = gtk_label_new("YOUR TURN");
+    // Turn indicator - BRIGHT CYAN
+    turn_indicator = gtk_label_new(">> YOUR TURN <<");
     GtkStyleContext* turn_context = gtk_widget_get_style_context(turn_indicator);
     gtk_style_context_add_class(turn_context, "glow-text");
 
-    // Match stats
-    GtkWidget* stats_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_set_homogeneous(GTK_BOX(stats_box), TRUE);
+    // Match stats - WHITE text
+    GtkWidget* stats_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
 
-    shots_label_widget = gtk_label_new("Shots\n0");
-    hits_label_widget = gtk_label_new("Hits\n0");
-    accuracy_label_widget = gtk_label_new("Accuracy\n0%");
+    shots_label_widget = gtk_label_new("SHOTS: 0");
+    hits_label_widget = gtk_label_new("HITS: 0");
+    accuracy_label_widget = gtk_label_new("ACCURACY: 0%");
 
-    gtk_box_pack_start(GTK_BOX(stats_box), shots_label_widget, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(stats_box), hits_label_widget, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(stats_box), accuracy_label_widget, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(stats_box), shots_label_widget, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(stats_box), hits_label_widget, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(stats_box), accuracy_label_widget, FALSE, FALSE, 0);
 
-    // Action buttons
-    GtkWidget* btn_fire = gtk_button_new_with_label("FIRE!");
-    GtkWidget* btn_pause = gtk_button_new_with_label("Pause");
-    GtkWidget* btn_draw = gtk_button_new_with_label("Offer Draw");
-    GtkWidget* btn_back = gtk_button_new_with_label("BACK TO MENU");
+    // Action buttons - PIXEL STYLE (FIRE, SURRENDER, EXIT)
+    GtkWidget* btn_fire = gtk_button_new_with_label("[ FIRE! ]");
+    gtk_widget_set_size_request(btn_fire, -1, 50);
 
+    GtkWidget* btn_resign = gtk_button_new_with_label("[ SURRENDER ]");
+    gtk_widget_set_size_request(btn_resign, -1, 45);
+    GtkStyleContext* btn_resign_context = gtk_widget_get_style_context(btn_resign);
+    gtk_style_context_add_class(btn_resign_context, "danger");
+
+    GtkWidget* btn_back = gtk_button_new_with_label("[ EXIT ]");
+    gtk_widget_set_size_request(btn_back, -1, 40);
     GtkStyleContext* btn_back_context = gtk_widget_get_style_context(btn_back);
-    gtk_style_context_add_class(btn_back_context, "danger");
+    gtk_style_context_add_class(btn_back_context, "secondary");
 
-    GtkStyleContext* btn_pause_context = gtk_widget_get_style_context(btn_pause);
-    gtk_style_context_add_class(btn_pause_context, "secondary");
-
-    GtkStyleContext* btn_draw_context = gtk_widget_get_style_context(btn_draw);
-    gtk_style_context_add_class(btn_draw_context, "secondary");
+    // Store fire button reference for enabling/disabling
+    fire_button = btn_fire;
 
     g_signal_connect(btn_fire, "clicked", G_CALLBACK(on_fire_clicked), this);
-    g_signal_connect(btn_pause, "clicked", G_CALLBACK(on_pause_clicked), this);
-    g_signal_connect(btn_draw, "clicked", G_CALLBACK(on_draw_offer_clicked), this);
+    g_signal_connect(btn_resign, "clicked", G_CALLBACK(on_resign_clicked), this);
     g_signal_connect(btn_back, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
-        ui->showScreen(SCREEN_MAIN_MENU);
+        ui->showScreen(SCREEN_LOBBY);  // Return to lobby instead
     }), this);
 
-    // Chat
-    GtkWidget* chat_frame = gtk_frame_new("Chat");
+    // Chat - Pixel style with proper colors
+    GtkWidget* chat_frame = gtk_frame_new(">> COMMS <<");
     GtkWidget* chat_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
 
     chat_view = gtk_text_view_new();
@@ -142,13 +148,23 @@ GtkWidget* UIManager::createGameScreen() {
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(chat_view), GTK_WRAP_WORD);
     gtk_widget_set_size_request(chat_view, -1, 100);
 
+    // Set text color to white for visibility
+    GdkRGBA text_color = {1.0, 1.0, 1.0, 1.0};  // White
+    GdkRGBA bg_color = {0.05, 0.05, 0.05, 1.0};  // Very dark gray
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    gtk_widget_override_color(chat_view, GTK_STATE_FLAG_NORMAL, &text_color);
+    gtk_widget_override_background_color(chat_view, GTK_STATE_FLAG_NORMAL, &bg_color);
+    #pragma GCC diagnostic pop
+
     GtkWidget* chat_scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(chat_scroll), chat_view);
 
     GtkWidget* chat_input_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     GtkWidget* chat_entry = gtk_entry_new();
-    GtkWidget* chat_send_btn = gtk_button_new_with_label("Send");
-    gtk_widget_set_size_request(chat_send_btn, 50, -1);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(chat_entry), "[ Type message... ]");
+    GtkWidget* chat_send_btn = gtk_button_new_with_label("[ SEND ]");
+    gtk_widget_set_size_request(chat_send_btn, 80, -1);
 
     // Store chat entry reference for later use
     g_object_set_data(G_OBJECT(chat_send_btn), "chat_entry", chat_entry);
@@ -189,14 +205,13 @@ GtkWidget* UIManager::createGameScreen() {
     gtk_box_pack_start(GTK_BOX(center_panel), turn_indicator, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(center_panel), stats_box, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(center_panel), btn_fire, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(center_panel), btn_pause, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(center_panel), btn_draw, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(center_panel), btn_resign, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(center_panel), btn_back, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(center_panel), chat_frame, TRUE, TRUE, 0);
 
-    // Right panel - Opponent board
+    // Right panel - Opponent board - PIXEL STYLE
     GtkWidget* right_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    GtkWidget* opponent_label = gtk_label_new("ENEMY WATERS");
+    GtkWidget* opponent_label = gtk_label_new(">> ENEMY WATERS <<");
     GtkStyleContext* opponent_label_context = gtk_widget_get_style_context(opponent_label);
     gtk_style_context_add_class(opponent_label_context, "glow-text");
 
@@ -251,18 +266,18 @@ GtkWidget* UIManager::createGameScreen() {
 GtkWidget* UIManager::createMainMenuScreen() {
     GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
-    // Custom header with minimize and close buttons
+    // Custom header - PIXEL STYLE
     GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_size_request(header, -1, 40);
-    GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
+    GdkRGBA header_bg = {0.0, 0.0, 0.0, 1.0};  // Pure black for max contrast
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
     #pragma GCC diagnostic pop
 
-    GtkWidget* logo = gtk_label_new("");
+    GtkWidget* logo = gtk_label_new("⚓");
     gtk_widget_set_name(logo, "logo");
-    GtkWidget* header_title = gtk_label_new("BATTLESHIP ONLINE");
+    GtkWidget* header_title = gtk_label_new(">> BATTLESHIP ONLINE <<");
     GtkStyleContext* header_title_ctx = gtk_widget_get_style_context(header_title);
     gtk_style_context_add_class(header_title_ctx, "glow-text");
 
@@ -297,18 +312,21 @@ GtkWidget* UIManager::createMainMenuScreen() {
     gtk_widget_set_margin_top(content, 100);
     gtk_widget_set_margin_bottom(content, 100);
 
-    // Title
-    GtkWidget* title = gtk_label_new("BATTLESHIP");
+    // Title - RETRO PIXEL STYLE (fixed spacing)
+    GtkWidget* title = gtk_label_new("╔═══════════════════════╗\n"
+                                     "║    BATTLESHIP GAME    ║\n"
+                                     "╚═══════════════════════╝");
     GtkStyleContext* title_context = gtk_widget_get_style_context(title);
     gtk_style_context_add_class(title_context, "title");
+    gtk_label_set_justify(GTK_LABEL(title), GTK_JUSTIFY_CENTER);
 
-    GtkWidget* subtitle = gtk_label_new("Naval Warfare Strategy Game");
+    GtkWidget* subtitle = gtk_label_new(">> RETRO NAVAL COMBAT <<");
     GtkStyleContext* subtitle_context = gtk_widget_get_style_context(subtitle);
     gtk_style_context_add_class(subtitle_context, "glow-text");
 
-    // Buttons
-    GtkWidget* btn_vs_bot = gtk_button_new_with_label("PLAY VS BOT");
-    gtk_widget_set_size_request(btn_vs_bot, 400, 80);
+    // Buttons - PIXEL ART STYLE
+    GtkWidget* btn_vs_bot = gtk_button_new_with_label("[ PLAY VS BOT ]");
+    gtk_widget_set_size_request(btn_vs_bot, 400, 70);
     g_signal_connect(btn_vs_bot, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
         ui->is_bot_mode = true;
@@ -321,15 +339,15 @@ GtkWidget* UIManager::createMainMenuScreen() {
         ui->showScreen(SCREEN_SHIP_PLACEMENT);
     }), this);
 
-    GtkWidget* btn_play_online = gtk_button_new_with_label("PLAY ONLINE");
-    gtk_widget_set_size_request(btn_play_online, 400, 80);
+    GtkWidget* btn_play_online = gtk_button_new_with_label("[ MULTIPLAYER ]");
+    gtk_widget_set_size_request(btn_play_online, 400, 70);
     g_signal_connect(btn_play_online, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
         ui->is_bot_mode = false;
         ui->showScreen(SCREEN_LOBBY);
     }), this);
 
-    GtkWidget* btn_exit = gtk_button_new_with_label("EXIT");
+    GtkWidget* btn_exit = gtk_button_new_with_label("[ QUIT ]");
     gtk_widget_set_size_request(btn_exit, 400, 50);
     GtkStyleContext* exit_context = gtk_widget_get_style_context(btn_exit);
     gtk_style_context_add_class(exit_context, "secondary");
@@ -343,8 +361,8 @@ GtkWidget* UIManager::createMainMenuScreen() {
     gtk_box_pack_start(GTK_BOX(content), btn_play_online, FALSE, FALSE, 10);
     gtk_box_pack_start(GTK_BOX(content), btn_exit, FALSE, FALSE, 10);
 
-    // Footer
-    GtkWidget* footer = gtk_label_new("Version 1.0 | Use Alt+Drag to move window");
+    // Footer - PIXEL STYLE
+    GtkWidget* footer = gtk_label_new("[ v1.0 RETRO EDITION ] | Alt+Drag to move");
     gtk_widget_set_margin_bottom(footer, 20);
 
     gtk_box_pack_start(GTK_BOX(main_box), header, FALSE, FALSE, 0);
@@ -359,10 +377,10 @@ GtkWidget* UIManager::createLoginScreen() {
     // Main container
     GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
-    // Custom header bar with drag support
+    // Custom header - PIXEL STYLE
     GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_size_request(header, -1, 50);
-    GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0}; // Navy
+    GdkRGBA header_bg = {0.0, 0.0, 0.0, 1.0};  // Pure black for max contrast
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
@@ -371,11 +389,11 @@ GtkWidget* UIManager::createLoginScreen() {
     // Make header draggable to move window
     makeDraggable(header, main_window);
 
-    // Logo and title in header
+    // Logo and title in header - PIXEL STYLE
     GtkWidget* header_title_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_widget_set_margin_start(header_title_box, 20);
-    GtkWidget* logo = gtk_label_new("");
-    GtkWidget* header_title = gtk_label_new("BATTLESHIP ONLINE");
+    GtkWidget* logo = gtk_label_new("⚓");
+    GtkWidget* header_title = gtk_label_new(">> LOGIN SYSTEM <<");
     GtkStyleContext* header_context = gtk_widget_get_style_context(header_title);
     gtk_style_context_add_class(header_context, "glow-text");
     gtk_box_pack_start(GTK_BOX(header_title_box), logo, FALSE, FALSE, 0);
@@ -412,36 +430,38 @@ GtkWidget* UIManager::createLoginScreen() {
     gtk_widget_set_margin_top(content_box, 50);
     gtk_widget_set_margin_bottom(content_box, 50);
 
-    // Title
-    GtkWidget* title = gtk_label_new("WELCOME ADMIRAL");
+    // Title - PIXEL STYLE
+    GtkWidget* title = gtk_label_new("╔═════════════════╗\n"
+                                     "║ WELCOME ADMIRAL ║\n"
+                                     "╚═════════════════╝");
     GtkStyleContext* title_context = gtk_widget_get_style_context(title);
     gtk_style_context_add_class(title_context, "title");
 
-    GtkWidget* subtitle = gtk_label_new("Prepare for Naval Combat");
+    GtkWidget* subtitle = gtk_label_new(">> AUTHENTICATE TO PROCEED <<");
     GtkStyleContext* subtitle_context = gtk_widget_get_style_context(subtitle);
     gtk_style_context_add_class(subtitle_context, "glow-text");
 
     // Input fields
     login_username_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(login_username_entry), "Username");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(login_username_entry), "[ USERNAME ]");
     gtk_widget_set_size_request(login_username_entry, 400, 50);
 
     login_password_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(login_password_entry), "Password");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(login_password_entry), "[ PASSWORD ]");
     gtk_entry_set_visibility(GTK_ENTRY(login_password_entry), FALSE);
     gtk_widget_set_size_request(login_password_entry, 400, 50);
 
-    // Buttons
-    GtkWidget* login_btn = gtk_button_new_with_label("ENTER BATTLE");
+    // Buttons - PIXEL STYLE
+    GtkWidget* login_btn = gtk_button_new_with_label("[ LOGIN ]");
     gtk_widget_set_size_request(login_btn, 400, 60);
 
-    GtkWidget* register_btn = gtk_button_new_with_label("ENLIST NOW");
+    GtkWidget* register_btn = gtk_button_new_with_label("[ CREATE ACCOUNT ]");
     gtk_widget_set_size_request(register_btn, 400, 45);
     GtkStyleContext* reg_context = gtk_widget_get_style_context(register_btn);
     gtk_style_context_add_class(reg_context, "secondary");
 
-    // Footer info
-    GtkWidget* footer = gtk_label_new("Version 1.0 | Multiplayer Naval Warfare");
+    // Footer info - PIXEL STYLE
+    GtkWidget* footer = gtk_label_new("[ v1.0 RETRO ] | MULTIPLAYER NAVAL COMBAT");
 
     gtk_box_pack_start(GTK_BOX(content_box), title, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(content_box), subtitle, FALSE, FALSE, 0);
@@ -492,22 +512,22 @@ GtkWidget* UIManager::createRegisterScreen() {
     // Similar to login but with confirm password
     GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
-    // Header with close button
+    // Header - PIXEL STYLE
     GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_size_request(header, -1, 50);
-    GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
+    GdkRGBA header_bg = {0.0, 0.0, 0.0, 1.0};  // Pure black for max contrast
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
     #pragma GCC diagnostic pop
 
-    GtkWidget* header_title = gtk_label_new("ENLIST - CREATE ACCOUNT");
+    GtkWidget* header_title = gtk_label_new(">> REGISTRATION SYSTEM <<");
     gtk_widget_set_margin_start(header_title, 20);
     GtkStyleContext* header_context = gtk_widget_get_style_context(header_title);
     gtk_style_context_add_class(header_context, "glow-text");
 
-    GtkWidget* back_btn = gtk_button_new_with_label("← BACK");
-    gtk_widget_set_size_request(back_btn, 100, 50);
+    GtkWidget* back_btn = gtk_button_new_with_label("[ BACK ]");
+    gtk_widget_set_size_request(back_btn, 110, 50);
     GtkStyleContext* back_context = gtk_widget_get_style_context(back_btn);
     gtk_style_context_add_class(back_context, "secondary");
     g_signal_connect(back_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
@@ -524,24 +544,24 @@ GtkWidget* UIManager::createRegisterScreen() {
     gtk_widget_set_valign(content_box, GTK_ALIGN_CENTER);
 
     register_username_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(register_username_entry), "Username (min 3 characters)");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(register_username_entry), "[ USERNAME (min 3) ]");
     gtk_widget_set_size_request(register_username_entry, 400, 50);
 
     register_display_name_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(register_display_name_entry), "Display Name");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(register_display_name_entry), "[ DISPLAY NAME ]");
     gtk_widget_set_size_request(register_display_name_entry, 400, 50);
 
     register_password_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(register_password_entry), "Password (min 6 characters)");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(register_password_entry), "[ PASSWORD (min 6) ]");
     gtk_entry_set_visibility(GTK_ENTRY(register_password_entry), FALSE);
     gtk_widget_set_size_request(register_password_entry, 400, 50);
 
     register_confirm_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(register_confirm_entry), "Confirm Password");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(register_confirm_entry), "[ CONFIRM PASSWORD ]");
     gtk_entry_set_visibility(GTK_ENTRY(register_confirm_entry), FALSE);
     gtk_widget_set_size_request(register_confirm_entry, 400, 50);
 
-    GtkWidget* register_btn = gtk_button_new_with_label("CREATE ACCOUNT");
+    GtkWidget* register_btn = gtk_button_new_with_label("[ REGISTER ]");
     gtk_widget_set_size_request(register_btn, 400, 60);
     g_signal_connect(register_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
@@ -596,10 +616,10 @@ GtkWidget* UIManager::createRegisterScreen() {
 GtkWidget* UIManager::createShipPlacementScreen() {
     GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
-    // Header
+    // Header - Pure black pixel style
     GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
     gtk_widget_set_size_request(header, -1, 60);
-    GdkRGBA header_bg = {0.0, 0.13, 0.27, 1.0};
+    GdkRGBA header_bg = {0.0, 0.0, 0.0, 1.0};  // Pure black
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     gtk_widget_override_background_color(header, GTK_STATE_FLAG_NORMAL, &header_bg);
@@ -607,11 +627,11 @@ GtkWidget* UIManager::createShipPlacementScreen() {
     gtk_widget_set_margin_start(header, 20);
     gtk_widget_set_margin_end(header, 20);
 
-    GtkWidget* title = gtk_label_new("DEPLOY YOUR FLEET");
+    GtkWidget* title = gtk_label_new("╔═══ DEPLOY FLEET ═══╗");
     GtkStyleContext* title_context = gtk_widget_get_style_context(title);
     gtk_style_context_add_class(title_context, "title");
 
-    GtkWidget* instruction = gtk_label_new("Position your ships strategically");
+    GtkWidget* instruction = gtk_label_new(">> Click grid to place ships <<");
     GtkStyleContext* inst_context = gtk_widget_get_style_context(instruction);
     gtk_style_context_add_class(inst_context, "glow-text");
 
@@ -630,7 +650,7 @@ GtkWidget* UIManager::createShipPlacementScreen() {
     // Left - Board
     GtkWidget* left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
 
-    GtkWidget* board_label = gtk_label_new("YOUR WATERS");
+    GtkWidget* board_label = gtk_label_new(">> YOUR FLEET <<");
     GtkStyleContext* board_context = gtk_widget_get_style_context(board_label);
     gtk_style_context_add_class(board_context, "glow-text");
 
@@ -658,17 +678,17 @@ GtkWidget* UIManager::createShipPlacementScreen() {
     GtkWidget* right_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_widget_set_size_request(right_panel, 300, -1);
 
-    GtkWidget* ships_label = gtk_label_new("AVAILABLE SHIPS");
+    GtkWidget* ships_label = gtk_label_new(">> SELECT SHIPS <<");
     GtkStyleContext* ships_context = gtk_widget_get_style_context(ships_label);
     gtk_style_context_add_class(ships_context, "glow-text");
 
-    // Ship list
+    // Ship list - Pixel style
     const char* ships[] = {
-        "Carrier (5)",
-        "Battleship (4)",
-        "Cruiser (3)",
-        "Submarine (3)",
-        "Destroyer (2)"
+        "[ CARRIER-5 ]",
+        "[ BATTLESHIP-4 ]",
+        "[ CRUISER-3 ]",
+        "[ SUBMARINE-3 ]",
+        "[ DESTROYER-2 ]"
     };
 
     GtkWidget* ships_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
@@ -688,8 +708,8 @@ GtkWidget* UIManager::createShipPlacementScreen() {
         }), this);
 
         // Delete button for removing ship
-        GtkWidget* delete_button = gtk_button_new_with_label("X");
-        gtk_widget_set_size_request(delete_button, 30, 30);
+        GtkWidget* delete_button = gtk_button_new_with_label("[X]");
+        gtk_widget_set_size_request(delete_button, 40, 30);
         GtkStyleContext* delete_context = gtk_widget_get_style_context(delete_button);
         gtk_style_context_add_class(delete_context, "danger");
         g_object_set_data(G_OBJECT(delete_button), "ship_type", GINT_TO_POINTER(i));
@@ -713,14 +733,14 @@ GtkWidget* UIManager::createShipPlacementScreen() {
     GtkWidget* controls_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_set_margin_top(controls_box, 15);
 
-    GtkWidget* rotate_btn = gtk_button_new_with_label("🔄 ROTATE");
+    GtkWidget* rotate_btn = gtk_button_new_with_label("[ ROTATE ]");
     gtk_widget_set_size_request(rotate_btn, -1, 40);
     g_signal_connect(rotate_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
         ui->toggleShipOrientation();
     }), this);
 
-    GtkWidget* clear_btn = gtk_button_new_with_label("🗑️ CLEAR ALL");
+    GtkWidget* clear_btn = gtk_button_new_with_label("[ CLEAR ALL ]");
     gtk_widget_set_size_request(clear_btn, -1, 40);
     GtkStyleContext* clear_context = gtk_widget_get_style_context(clear_btn);
     gtk_style_context_add_class(clear_context, "secondary");
@@ -729,7 +749,7 @@ GtkWidget* UIManager::createShipPlacementScreen() {
         ui->clearAllShips();
     }), this);
 
-    GtkWidget* random_btn = gtk_button_new_with_label("🎲 RANDOM");
+    GtkWidget* random_btn = gtk_button_new_with_label("[ RANDOMIZE ]");
     gtk_widget_set_size_request(random_btn, -1, 40);
     GtkStyleContext* random_context = gtk_widget_get_style_context(random_btn);
     gtk_style_context_add_class(random_context, "secondary");
@@ -738,7 +758,7 @@ GtkWidget* UIManager::createShipPlacementScreen() {
         ui->randomPlaceAllShips();
     }), this);
 
-    GtkWidget* ready_btn = gtk_button_new_with_label("READY FOR BATTLE!");
+    GtkWidget* ready_btn = gtk_button_new_with_label("[ >> READY! << ]");
     gtk_widget_set_size_request(ready_btn, -1, 50);
     ready_battle_button = ready_btn;  // Store reference
     gtk_widget_set_sensitive(ready_btn, FALSE);  // Disabled until all ships placed
@@ -755,7 +775,7 @@ GtkWidget* UIManager::createShipPlacementScreen() {
                     // Update button to show waiting state
                     g_idle_add(+[](gpointer data) -> gboolean {
                         GtkButton* button = GTK_BUTTON(data);
-                        gtk_button_set_label(button, "⏳ WAITING FOR OPPONENT...");
+                        gtk_button_set_label(button, ">> WAITING OPPONENT <<");
                         gtk_widget_set_sensitive(GTK_WIDGET(button), FALSE);
                         return G_SOURCE_REMOVE;
                     }, btn);
@@ -774,7 +794,7 @@ GtkWidget* UIManager::createShipPlacementScreen() {
         }
     }), this);
 
-    GtkWidget* back_btn = gtk_button_new_with_label("← BACK");
+    GtkWidget* back_btn = gtk_button_new_with_label("[ EXIT ]");
     gtk_widget_set_size_request(back_btn, -1, 35);
     GtkStyleContext* back_context = gtk_widget_get_style_context(back_btn);
     gtk_style_context_add_class(back_context, "danger");

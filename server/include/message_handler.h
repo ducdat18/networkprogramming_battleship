@@ -46,7 +46,7 @@ protected:
     /**
      * Send an error response
      */
-    bool sendError(ClientConnection* client, const std::string& error_msg) {
+    bool sendError(ClientConnection* /* client */, const std::string& /* error_msg */) {
         // TODO: Define ErrorMessage struct
         // For now, just log
         return true;

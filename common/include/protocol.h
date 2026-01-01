@@ -81,6 +81,15 @@ enum GameResult {
     RESULT_DRAW = 2
 };
 
+// Match end reason
+enum MatchEndReason {
+    END_NORMAL = 0,          // Normal game completion
+    END_RESIGN = 1,          // Player resigned
+    END_DISCONNECT = 2,      // Player disconnected
+    END_TIMEOUT = 3,         // Player timed out
+    END_DRAW_AGREED = 4      // Both players agreed to draw
+};
+
 // Shot result
 enum ShotResult {
     SHOT_MISS = 0,

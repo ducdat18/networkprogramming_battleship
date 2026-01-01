@@ -56,8 +56,9 @@ int main(int argc, char* argv[]) {
             std::cout << "Chat: " << message << std::endl;
         });
 
-        ui_manager.setOnResign([]() {
-            std::cout << "Player resigned!" << std::endl;
+        ui_manager.setOnResign([&ui_manager]() {
+            std::cout << "[GAME] Player clicked resign button!" << std::endl;
+            ui_manager.resignMatch();
         });
 
         ui_manager.setOnDrawOffer([]() {

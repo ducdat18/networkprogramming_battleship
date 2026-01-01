@@ -6,6 +6,7 @@
 #include "game_state.h"
 #include "animation.h"
 #include "client_network.h"
+#include "audio_manager.h"
 #include <string>
 #include <functional>
 
@@ -203,7 +204,7 @@ public:
     void addChatMessage(const std::string& sender, const std::string& message, bool is_self);
 
     // Dialogs
-    void showResultDialog(GameResult result, int elo_change);
+    void showResultDialog(GameResult result, int elo_change, const char* reason = nullptr);
     void showChallengeDialog(const std::string& opponent_name, int opponent_elo);
     void showErrorDialog(const std::string& message);
     void showNotification(const std::string& message);
@@ -222,6 +223,9 @@ public:
     void setOnChatSend(std::function<void(const std::string&)> callback) { on_chat_send = callback; }
     void setOnResign(std::function<void()> callback) { on_resign = callback; }
     void setOnDrawOffer(std::function<void()> callback) { on_draw_offer = callback; }
+
+    // Game actions
+    void resignMatch();
 
     // Helper for draggable header
     static void makeDraggable(GtkWidget* widget, GtkWidget* window);

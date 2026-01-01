@@ -4,7 +4,7 @@
 
 # Compiler and flags
 CXX = g++
-CXXFLAGS = -std=c++14 -Wall -Wextra -O2
+CXXFLAGS = -std=c++14 -Wall -Wextra -O2 -Wno-stringop-truncation -Wno-deprecated-declarations
 DEBUGFLAGS = -g -DDEBUG
 
 # GTK flags
