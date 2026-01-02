@@ -337,40 +337,40 @@ void UIManager::showScreen(UIScreen screen) {
     switch (screen) {
         case SCREEN_MAIN_MENU:
             current_screen = createMainMenuScreen();
-            AudioManager::getInstance().playBackgroundMusic();
+            // AudioManager::getInstance().playBackgroundMusic();
             break;
         case SCREEN_LOGIN:
             current_screen = createLoginScreen();
-            AudioManager::getInstance().stopMusic();
+            // AudioManager::getInstance().stopMusic();
             break;
         case SCREEN_REGISTER:
             current_screen = createRegisterScreen();
-            AudioManager::getInstance().stopMusic();
+            // AudioManager::getInstance().stopMusic();
             break;
         case SCREEN_LOBBY:
             current_screen = createLobbyScreen();
-            std::cout << "[UI] 🎵 Starting funky lobby music..." << std::endl;
-            AudioManager::getInstance().playBackgroundMusic();
+            // std::cout << "[UI] 🎵 Starting funky lobby music..." << std::endl;
+            // AudioManager::getInstance().playBackgroundMusic();
             break;
         case SCREEN_SHIP_PLACEMENT:
             current_screen = createShipPlacementScreen();
-            AudioManager::getInstance().stopMusic();
+            // AudioManager::getInstance().stopMusic();
             break;
         case SCREEN_GAME:
             current_screen = createGameScreen();
             // Start turn timer when game begins
             is_player_turn = true;
             startTurnTimer(20); // 20 seconds per turn
-            std::cout << "[UI] 🎮 Starting intense battle music..." << std::endl;
-            AudioManager::getInstance().playGameMusic();
+            // std::cout << "[UI] 🎮 Starting intense battle music..." << std::endl;
+            // AudioManager::getInstance().playGameMusic();
             break;
         case SCREEN_REPLAY:
             current_screen = createReplayScreen();
-            AudioManager::getInstance().stopMusic();
+            // AudioManager::getInstance().stopMusic();
             break;
         case SCREEN_PROFILE:
             current_screen = createProfileScreen();
-            AudioManager::getInstance().stopMusic();
+            // AudioManager::getInstance().stopMusic();
             break;
     }
 
@@ -431,8 +431,8 @@ void UIManager::resignMatch() {
     std::cout << "[UI] 🏳️ Player is resigning match..." << std::endl;
 
     // Stop music and play defeat sound
-    AudioManager::getInstance().stopMusic();
-    AudioManager::getInstance().playDefeatMusic();
+    // AudioManager::getInstance().stopMusic();
+    // AudioManager::getInstance().playDefeatMusic();
 
     // Send RESIGN message to server if in multiplayer mode
     if (network && network->isConnected() && current_match_id > 0) {
@@ -481,7 +481,7 @@ void UIManager::showErrorDialog(const std::string& message) {
 
 void UIManager::showNotification(const std::string& message) {
     // Play notification sound
-    AudioManager::getInstance().playBeep();
+    // AudioManager::getInstance().playBeep();
 
     // Check if this is a victory/defeat message - Enhanced Pixel Art
     if (message.find("VICTORY") != std::string::npos || message.find("DEFEAT") != std::string::npos) {
@@ -489,11 +489,11 @@ void UIManager::showNotification(const std::string& message) {
 
         // Play victory or defeat music
         if (is_victory) {
-            std::cout << "[UI] 🎉 Playing victory fanfare!" << std::endl;
-            AudioManager::getInstance().playVictoryMusic();
+            std::cout << "[UI] 🎉 Victory!" << std::endl;
+            // AudioManager::getInstance().playVictoryMusic();
         } else {
-            std::cout << "[UI] 💔 Playing defeat music..." << std::endl;
-            AudioManager::getInstance().playDefeatMusic();
+            std::cout << "[UI] 💔 Defeat..." << std::endl;
+            // AudioManager::getInstance().playDefeatMusic();
         }
 
         // Create beautiful pixel art dialog
@@ -1007,7 +1007,7 @@ bool UIManager::executeFireAtTarget() {
     shots_fired++;
 
     // Play shot sound
-    AudioManager::getInstance().playShotSound();
+    // AudioManager::getInstance().playShotSound();
 
     // Add animation based on result
     if (result == SHOT_HIT) {
@@ -1016,13 +1016,13 @@ bool UIManager::executeFireAtTarget() {
             animation_manager->addExplosion(row, col);
         }
         // Play hit sound effect
-        AudioManager::getInstance().playHitSound();
+        // AudioManager::getInstance().playHitSound();
         std::cout << "💥 HIT at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
     } else if (result == SHOT_SUNK) {
         hits_count++;
         // No explosion animation for sunk ships
         // Play ship sunk sound effect
-        AudioManager::getInstance().playSunkSound();
+        // AudioManager::getInstance().playSunkSound();
         std::cout << "🚢 SUNK at " << (char)('A' + row) << (col + 1) << "!" << std::endl;
     } else {
         if (animation_manager) {
@@ -1294,7 +1294,7 @@ void UIManager::handleLogoutResponse(bool success) {
 
 void UIManager::showErrorDialog(const std::string& title, const std::string& message) {
     // Play error sound
-    AudioManager::getInstance().playErrorSound();
+    // AudioManager::getInstance().playErrorSound();
 
     // Create beautiful error dialog with ASCII art
     GtkWidget* dialog = gtk_dialog_new();
@@ -1376,7 +1376,7 @@ void UIManager::showErrorDialog(const std::string& title, const std::string& mes
 
 void UIManager::showInfoDialog(const std::string& title, const std::string& message) {
     // Play success sound
-    AudioManager::getInstance().playSuccessSound();
+    // AudioManager::getInstance().playSuccessSound();
 
     // Create beautiful info dialog with ASCII art
     GtkWidget* dialog = gtk_dialog_new();
@@ -1455,105 +1455,139 @@ void UIManager::showInfoDialog(const std::string& title, const std::string& mess
 }
 
 void UIManager::showResultDialog(GameResult result, int elo_change, const char* reason) {
-    const char* title;
-    const char* ascii_art;
+    // Create custom dialog - like challenge dialog with proper black background
+    GtkWidget* dialog = gtk_dialog_new();
+
+    const char* window_title;
+    const char* ascii_title;
+    GdkRGBA bg_color = {0.0, 0.0, 0.0, 1.0};  // Pure black
 
     switch (result) {
         case RESULT_WIN:
-            title = "╔═══ VICTORY! ═══╗";
-            ascii_art = "*** YOU WIN ***";
+            window_title = "VICTORY";
+            ascii_title = "╔════════════════════════╗\n"
+                         "║  ⭐ >> VICTORY! << ⭐  ║\n"
+                         "╚════════════════════════╝";
+            bg_color = {0.0, 0.15, 0.0, 1.0};  // Dark green for victory
             break;
         case RESULT_LOSS:
-            title = "╔═══ DEFEAT ═══╗";
-            ascii_art = "*** GAME OVER ***";
+            window_title = "DEFEAT";
+            ascii_title = "╔════════════════════════╗\n"
+                         "║  💀 >> DEFEAT << 💀    ║\n"
+                         "╚════════════════════════╝";
+            bg_color = {0.15, 0.0, 0.0, 1.0};  // Dark red for defeat
             break;
         case RESULT_DRAW:
         default:
-            title = "╔═══ DRAW ═══╗";
-            ascii_art = "*** STALEMATE ***";
+            window_title = "DRAW";
+            ascii_title = "╔════════════════════════╗\n"
+                         "║  🤝 >> DRAW << 🤝      ║\n"
+                         "╚════════════════════════╝";
+            bg_color = {0.05, 0.05, 0.05, 1.0};  // Dark gray for draw
             break;
     }
 
-    char message[512];
-    int new_elo = network->getEloRating();
-    const char* reason_display = reason ? reason : "Match ended";
+    gtk_window_set_title(GTK_WINDOW(dialog), window_title);
+    gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(main_window));
+    gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 500, 350);
+    gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
 
-    if (elo_change > 0) {
-        snprintf(message, sizeof(message),
-                 "%s\n\n"
-                 "%s\n\n"
-                 "═════════════════════\n"
-                 "ELO CHANGE: +%d\n"
-                 "NEW ELO: %d\n"
-                 "═════════════════════",
-                 ascii_art, reason_display, elo_change, new_elo);
-    } else if (elo_change < 0) {
-        snprintf(message, sizeof(message),
-                 "%s\n\n"
-                 "%s\n\n"
-                 "═════════════════════\n"
-                 "ELO CHANGE: %d\n"
-                 "NEW ELO: %d\n"
-                 "═════════════════════",
-                 ascii_art, reason_display, elo_change, new_elo);
-    } else {
-        snprintf(message, sizeof(message),
-                 "%s\n\n"
-                 "%s\n\n"
-                 "═════════════════════\n"
-                 "NO ELO CHANGE\n"
-                 "CURRENT ELO: %d\n"
-                 "═════════════════════",
-                 ascii_art, reason_display, new_elo);
-    }
+    // Set background color
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    gtk_widget_override_background_color(dialog, GTK_STATE_FLAG_NORMAL, &bg_color);
+    #pragma GCC diagnostic pop
 
-    // Create dialog with RE-CHALLENGE button - PIXEL STYLE
-    GtkWidget* dialog = gtk_dialog_new_with_buttons(
-        title,
-        GTK_WINDOW(main_window),
-        GTK_DIALOG_MODAL,
-        "[ LOBBY ]",
-        GTK_RESPONSE_CANCEL,
-        "[ RE-CHALLENGE ]",
-        GTK_RESPONSE_ACCEPT,
-        NULL
-    );
-
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 450, 280);
-
+    // Content area with same background
     GtkWidget* content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_widget_override_background_color(content_area, GTK_STATE_FLAG_NORMAL, &bg_color);
     gtk_widget_set_margin_start(content_area, 30);
     gtk_widget_set_margin_end(content_area, 30);
-    gtk_widget_set_margin_top(content_area, 20);
+    gtk_widget_set_margin_top(content_area, 30);
     gtk_widget_set_margin_bottom(content_area, 20);
 
-    GtkWidget* label = gtk_label_new(message);
-    gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
+    GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 15);
 
-    // PIXEL STYLE: Bigger, bold, monospace
-    PangoAttrList* attrs = pango_attr_list_new();
-    pango_attr_list_insert(attrs, pango_attr_weight_new(PANGO_WEIGHT_BOLD));
-    pango_attr_list_insert(attrs, pango_attr_scale_new(1.6));
-    pango_attr_list_insert(attrs, pango_attr_family_new("monospace"));
-    gtk_label_set_attributes(GTK_LABEL(label), attrs);
-    pango_attr_list_unref(attrs);
+    // Title with ASCII art
+    GtkWidget* title_label = gtk_label_new(ascii_title);
+    GtkStyleContext* title_context = gtk_widget_get_style_context(title_label);
+    gtk_style_context_add_class(title_context, "title");
 
-    gtk_container_add(GTK_CONTAINER(content_area), label);
+    // Reason text
+    const char* reason_display = reason ? reason : "Match ended";
+    char reason_text[256];
+    snprintf(reason_text, sizeof(reason_text), "\n%s\n", reason_display);
+    GtkWidget* reason_label = gtk_label_new(reason_text);
+    GtkStyleContext* reason_context = gtk_widget_get_style_context(reason_label);
+    gtk_style_context_add_class(reason_context, "glow-text");
+    gtk_label_set_justify(GTK_LABEL(reason_label), GTK_JUSTIFY_CENTER);
+
+    // ELO change info
+    char elo_text[256];
+    int new_elo = network->getEloRating();
+    if (elo_change > 0) {
+        snprintf(elo_text, sizeof(elo_text),
+                 "═════════════════════\n"
+                 "ELO CHANGE: +%d ⬆️\n"
+                 "NEW ELO: %d\n"
+                 "═════════════════════",
+                 elo_change, new_elo);
+    } else if (elo_change < 0) {
+        snprintf(elo_text, sizeof(elo_text),
+                 "═════════════════════\n"
+                 "ELO CHANGE: %d ⬇️\n"
+                 "NEW ELO: %d\n"
+                 "═════════════════════",
+                 elo_change, new_elo);
+    } else {
+        snprintf(elo_text, sizeof(elo_text),
+                 "═════════════════════\n"
+                 "NO ELO CHANGE ⚖️\n"
+                 "CURRENT ELO: %d\n"
+                 "═════════════════════",
+                 new_elo);
+    }
+    GtkWidget* elo_label = gtk_label_new(elo_text);
+    GtkStyleContext* elo_context = gtk_widget_get_style_context(elo_label);
+    gtk_style_context_add_class(elo_context, "glow-text");
+    gtk_label_set_justify(GTK_LABEL(elo_label), GTK_JUSTIFY_CENTER);
+
+    gtk_box_pack_start(GTK_BOX(vbox), title_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), reason_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), elo_label, TRUE, TRUE, 0);
+
+    gtk_container_add(GTK_CONTAINER(content_area), vbox);
+
+    // Action area - custom buttons
+    GtkWidget* action_area = gtk_dialog_get_action_area(GTK_DIALOG(dialog));
+    gtk_widget_override_background_color(action_area, GTK_STATE_FLAG_NORMAL, &bg_color);
+    gtk_widget_set_margin_start(action_area, 30);
+    gtk_widget_set_margin_end(action_area, 30);
+    gtk_widget_set_margin_bottom(action_area, 20);
+
+    GtkWidget* button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    gtk_widget_set_halign(button_box, GTK_ALIGN_CENTER);
+
+    GtkWidget* lobby_btn = gtk_button_new_with_label("[ RETURN TO LOBBY ]");
+    gtk_widget_set_size_request(lobby_btn, 200, 45);
+    GtkStyleContext* lobby_context = gtk_widget_get_style_context(lobby_btn);
+    gtk_style_context_add_class(lobby_context, "primary");
+
+    gtk_box_pack_start(GTK_BOX(button_box), lobby_btn, FALSE, FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(action_area), button_box);
+
+    // Connect button signal
+    g_signal_connect(lobby_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        gtk_dialog_response(GTK_DIALOG(data), GTK_RESPONSE_OK);
+    }), dialog);
+
     gtk_widget_show_all(dialog);
-
-    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
 
-    if (response == GTK_RESPONSE_ACCEPT) {
-        // RE-CHALLENGE - send challenge request to same opponent
-        // TODO: Implement re-challenge logic with server
-        std::cout << "[UI] Re-challenge requested!" << std::endl;
-        showNotification("Re-challenge feature coming soon!");
-        showScreen(SCREEN_LOBBY);
-    } else {
-        // Return to lobby
-        showScreen(SCREEN_LOBBY);
-    }
+    // Return to lobby
+    showScreen(SCREEN_LOBBY);
 }
 
 void UIManager::showChallengeDialog(const std::string& opponent_name, int opponent_elo) {

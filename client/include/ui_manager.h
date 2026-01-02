@@ -158,6 +158,10 @@ public:
     // Pending challenge (when dialog is shown while current_screen might be null)
     uint32_t pending_challenge_id_;
 
+    // Track opponent from last match for rechallenge
+    uint32_t last_opponent_id_;
+    std::string last_opponent_name_;
+
 public:
     // Callbacks
     std::function<void(int, int)> on_cell_clicked;

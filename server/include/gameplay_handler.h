@@ -32,6 +32,10 @@ private:
     std::map<uint32_t, std::set<uint32_t>> ready_players_;
     std::mutex ready_mutex_;
 
+    // Track rematch requests (old_match_id -> pair<requester_id, opponent_id>)
+    std::map<uint32_t, std::pair<uint32_t, uint32_t>> pending_rematches_;
+    std::mutex rematch_mutex_;
+
 public:
     GameplayHandler(Server* server, DatabaseManager* db);
     ~GameplayHandler();
@@ -48,6 +52,8 @@ public:
     void handleResign(const MessageHeader& header, const ResignMessage& msg, int client_fd);
     void handleDrawOffer(const MessageHeader& header, const DrawOfferMessage& msg, int client_fd);
     void handleDrawResponse(const MessageHeader& header, const DrawResponseMessage& msg, int client_fd);
+    void handleRematchRequest(const MessageHeader& header, const RematchRequestMessage& msg, int client_fd);
+    void handleRematchResponse(const MessageHeader& header, const RematchResponseMessage& msg, int client_fd);
 
     // Match management
     std::shared_ptr<MatchState> getMatch(uint32_t match_id);

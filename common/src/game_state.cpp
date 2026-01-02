@@ -99,6 +99,9 @@ void Board::clearBoard() {
     }
     ships_count = 0;
     ships_remaining = NUM_SHIPS;
+
+    // Clear all ship data
+    memset(ships, 0, sizeof(ships));
 }
 
 ShotResult Board::processShot(Coordinate pos) {
@@ -184,7 +187,7 @@ void Board::randomPlacement() {
 
 // MatchState implementation
 MatchState::MatchState()
-    : current_turn_player_id(0), turn_number(0), turn_time_limit(60),
+    : current_turn_player_id(0), turn_number(0), turn_time_limit(20),
       start_time(0), end_time(0), result(RESULT_DRAW), winner_id(0),
       is_active(false), is_paused(false) {
 }

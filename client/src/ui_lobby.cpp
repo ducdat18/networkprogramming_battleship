@@ -402,36 +402,66 @@ GtkWidget* UIManager::createLobbyScreen() {
         struct CallbackData {
             UIManager* ui;
             uint32_t match_id;
+            uint32_t opponent_id;
+            std::string opponent_name;
         };
 
         g_idle_add(+[](gpointer data) -> gboolean {
             auto* cb_data = static_cast<CallbackData*>(data);
 
             if (cb_data->ui) {
-                std::cout << "[LOBBY] 🎮 Match started! match_id=" << cb_data->match_id << " Transitioning to ship placement..." << std::endl;
+                std::cout << "[LOBBY] 🎮 Match started! match_id=" << cb_data->match_id
+                          << " vs " << cb_data->opponent_name << " Transitioning to ship placement..." << std::endl;
                 cb_data->ui->current_match_id = cb_data->match_id;
                 cb_data->ui->waiting_for_match_ready = false;
 
-                // Clear boards for new match
+                // Store opponent info for rechallenge
+                cb_data->ui->last_opponent_id_ = cb_data->opponent_id;
+                cb_data->ui->last_opponent_name_ = cb_data->opponent_name;
+
+                // Clear boards for new match - COMPLETE RESET
+                std::cout << "[UI] Clearing boards for new match..." << std::endl;
                 if (cb_data->ui->player_board) {
                     cb_data->ui->player_board->clearBoard();
+                    std::cout << "[UI] Player board cleared" << std::endl;
                 }
                 if (cb_data->ui->opponent_board) {
                     cb_data->ui->opponent_board->clearBoard();
+                    std::cout << "[UI] Opponent board cleared" << std::endl;
                 }
+
+                // Force invalidate old drawing areas (they'll be recreated)
+                cb_data->ui->player_board_area = nullptr;
+                cb_data->ui->opponent_board_area = nullptr;
 
                 // Reset game stats for new match
                 cb_data->ui->shots_fired = 0;
                 cb_data->ui->hits_count = 0;
+
+                // IMPORTANT: Reset ship placement UI state BEFORE creating new screen
                 for (int i = 0; i < NUM_SHIPS; i++) {
                     cb_data->ui->ships_placed[i] = false;
                 }
 
+                // Reset ship placement widgets to null (they'll be recreated)
+                for (int i = 0; i < NUM_SHIPS; i++) {
+                    cb_data->ui->ship_status_labels[i] = nullptr;
+                    cb_data->ui->ship_buttons[i] = nullptr;
+                }
+                cb_data->ui->ready_battle_button = nullptr;
+
+                // Reset orientation and selection
+                cb_data->ui->selected_ship_type = SHIP_CARRIER;
+                cb_data->ui->current_orientation = HORIZONTAL;
+                cb_data->ui->hover_row = -1;
+                cb_data->ui->hover_col = -1;
+
+                std::cout << "[UI] All state reset, transitioning to ship placement..." << std::endl;
                 cb_data->ui->showScreen(SCREEN_SHIP_PLACEMENT);
             }
             delete cb_data;
             return G_SOURCE_REMOVE;
-        }, new CallbackData{this, match.match_id});
+        }, new CallbackData{this, match.match_id, match.opponent_id, std::string(match.opponent_name)});
     });
 
     // Set up MATCH_READY callback to transition to game screen

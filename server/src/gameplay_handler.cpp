@@ -18,7 +18,9 @@ bool GameplayHandler::canHandle(MessageType type) const {
             type == MessageType::MOVE ||
             type == MessageType::RESIGN ||
             type == MessageType::DRAW_OFFER ||
-            type == MessageType::DRAW_RESPONSE);
+            type == MessageType::DRAW_RESPONSE ||
+            type == MessageType::REMATCH_REQUEST ||
+            type == MessageType::REMATCH_RESPONSE);
 }
 
 bool GameplayHandler::handleMessage(ClientConnection* client,
@@ -75,6 +77,26 @@ bool GameplayHandler::handleMessage(ClientConnection* client,
                 DrawResponseMessage msg;
                 memcpy(&msg, payload.data(), sizeof(DrawResponseMessage));
                 handleDrawResponse(header, msg, client_fd);
+                return true;
+            }
+            break;
+        }
+
+        case MessageType::REMATCH_REQUEST: {
+            if (payload.size() >= sizeof(RematchRequestMessage)) {
+                RematchRequestMessage msg;
+                memcpy(&msg, payload.data(), sizeof(RematchRequestMessage));
+                handleRematchRequest(header, msg, client_fd);
+                return true;
+            }
+            break;
+        }
+
+        case MessageType::REMATCH_RESPONSE: {
+            if (payload.size() >= sizeof(RematchResponseMessage)) {
+                RematchResponseMessage msg;
+                memcpy(&msg, payload.data(), sizeof(RematchResponseMessage));
+                handleRematchResponse(header, msg, client_fd);
                 return true;
             }
             break;
@@ -629,7 +651,7 @@ void GameplayHandler::sendTurnUpdate(uint32_t match_id, uint32_t current_player_
     msg.match_id = match_id;
     msg.current_player_id = current_player_id;
     msg.turn_number = turn_number;
-    msg.time_left = 60;
+    msg.time_left = 20;
 
     MessageHeader header;
     memset(&header, 0, sizeof(header));
@@ -812,4 +834,78 @@ void GameplayHandler::handlePlayerDisconnect(uint32_t disconnected_user_id) {
             // Disconnected player is already being removed by removeClient
         }
     }
+}
+
+void GameplayHandler::handleRematchRequest(const MessageHeader& header,
+                                          const RematchRequestMessage& msg,
+                                          int client_fd) {
+    (void)client_fd;
+
+    // Validate session
+    std::string token(header.session_token);
+    uint32_t requester_id = db_->validateSession(token);
+    if (requester_id == 0) {
+        std::cout << "[REMATCH] Invalid session token" << std::endl;
+        return;
+    }
+
+    // Get old match data from database to find opponent
+    // For now, we need to track who played in each match
+    // This is a simplification - in production, query match participants from DB
+
+    std::cout << "[REMATCH] User " << requester_id << " requests rematch for match "
+              << msg.previous_match_id << std::endl;
+
+    // Query database for match participants
+    // Simplified: assume we can get opponent from previous match
+    // In real implementation, query: SELECT player1_id, player2_id FROM matches WHERE match_id = ?
+
+    // For now, store the rematch request
+    {
+        std::lock_guard<std::mutex> lock(rematch_mutex_);
+        // This is incomplete without DB query - will implement full version
+        std::cout << "[REMATCH] Rematch request stored for match " << msg.previous_match_id << std::endl;
+    }
+
+    // TODO: Query opponent_id from database and forward request
+    // Forward rematch request to opponent
+    // MessageHeader forward_header;
+    // memset(&forward_header, 0, sizeof(forward_header));
+    // forward_header.type = MessageType::REMATCH_REQUEST;
+    // forward_header.length = sizeof(msg);
+    // forward_header.timestamp = time(nullptr);
+
+    // ClientConnection* opponent_conn = server_->getPlayerManager()->getClientConnection(opponent_id);
+    // if (opponent_conn) {
+    //     server_->sendToClient(opponent_conn->getSocketFd(), forward_header, &msg, sizeof(msg));
+    // }
+}
+
+void GameplayHandler::handleRematchResponse(const MessageHeader& header,
+                                           const RematchResponseMessage& msg,
+                                           int client_fd) {
+    (void)client_fd;
+
+    // Validate session
+    std::string token(header.session_token);
+    uint32_t responder_id = db_->validateSession(token);
+    if (responder_id == 0) {
+        return;
+    }
+
+    std::cout << "[REMATCH] User " << responder_id << " responded to rematch: "
+              << (msg.accepted ? "ACCEPTED" : "DECLINED") << std::endl;
+
+    if (!msg.accepted) {
+        // Forward decline to requester
+        // TODO: Get requester_id and forward
+        return;
+    }
+
+    // Create new match between same two players
+    // TODO: Query player IDs from previous match
+    // uint32_t new_match_id = db_->createMatch(player1_id, player2_id, "waiting_for_ships");
+
+    // Send MATCH_START to both players
+    // TODO: Implement full flow
 }
