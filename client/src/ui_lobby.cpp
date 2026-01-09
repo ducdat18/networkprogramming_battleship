@@ -730,6 +730,12 @@ GtkWidget* UIManager::createLobbyScreen() {
             if (ui) {
                 std::cout << "[UI] 🏁 Match ended! Winner: " << cb_data->msg.winner_id << std::endl;
 
+                // Clear resignation flag if we were waiting for MATCH_END
+                if (ui->waiting_for_match_end_resignation_) {
+                    std::cout << "[UI] Resignation confirmed by server, transitioning to lobby" << std::endl;
+                    ui->waiting_for_match_end_resignation_ = false;
+                }
+
                 // Stop turn timer
                 ui->stopTurnTimer();
 

@@ -534,6 +534,56 @@ void GameplayHandler::removeMatch(uint32_t match_id) {
     }
 }
 
+void GameplayHandler::checkTurnTimeouts() {
+    std::vector<uint32_t> timed_out_matches;
+
+    // Find all matches with timed out turns
+    {
+        std::lock_guard<std::mutex> lock(matches_mutex_);
+        for (const auto& pair : active_matches_) {
+            auto match = pair.second;
+            if (match && match->isTurnTimedOut()) {
+                timed_out_matches.push_back(pair.first);
+                std::cout << "[TIMEOUT] Match " << pair.first
+                          << " - Player " << match->current_turn_player_id
+                          << " timed out" << std::endl;
+            }
+        }
+    }
+
+    // Process timeouts (outside of lock to avoid deadlock)
+    for (uint32_t match_id : timed_out_matches) {
+        auto match = getMatch(match_id);
+        if (!match) continue;
+
+        uint32_t timed_out_player = match->current_turn_player_id;
+        uint32_t winner_id = (timed_out_player == match->player1_id) ?
+                             match->player2_id : match->player1_id;
+
+        std::cout << "[TIMEOUT] Ending match " << match_id
+                  << " - Player " << timed_out_player << " loses by timeout" << std::endl;
+
+        // End match with timeout reason
+        uint64_t duration = time(nullptr) - match->start_time;
+        sendMatchEnd(match_id, match->player1_id, match->player2_id,
+                    winner_id, END_TIMEOUT, "Turn time limit exceeded",
+                    match->move_history.size(), duration);
+
+        // Update database
+        db_->endMatch(match_id, winner_id);
+
+        // Update player status back to available
+        auto player_manager = server_->getPlayerManager();
+        if (player_manager) {
+            player_manager->updatePlayerStatus(match->player1_id, STATUS_AVAILABLE);
+            player_manager->updatePlayerStatus(match->player2_id, STATUS_AVAILABLE);
+        }
+
+        // Remove match from active matches
+        removeMatch(match_id);
+    }
+}
+
 bool GameplayHandler::validateShipPlacement(const Ship ships[5]) {
     // Check that we have exactly 5 ships
     int ship_count = 0;

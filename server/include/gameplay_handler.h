@@ -59,6 +59,7 @@ public:
     std::shared_ptr<MatchState> getMatch(uint32_t match_id);
     void createMatch(uint32_t match_id, uint32_t player1_id, uint32_t player2_id);
     void removeMatch(uint32_t match_id);
+    void checkTurnTimeouts();  // Check all active matches for turn timeouts
 
     // Validation
     bool validateShipPlacement(const Ship ships[5]);

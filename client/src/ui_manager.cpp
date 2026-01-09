@@ -32,7 +32,7 @@ UIManager::UIManager()
       fire_button(nullptr), turn_time_remaining(20), turn_timer_id(0), turn_timer_label(nullptr),
       animation_manager(nullptr), is_bot_mode(false),
       current_match_id(0), waiting_for_match_ready(false),
-      pending_challenge_id_(0),
+      waiting_for_match_end_resignation_(false), pending_challenge_id_(0),
       network(nullptr),
       login_username_entry(nullptr), login_password_entry(nullptr),
       register_username_entry(nullptr), register_password_entry(nullptr),
@@ -437,6 +437,10 @@ void UIManager::resignMatch() {
     // Send RESIGN message to server if in multiplayer mode
     if (network && network->isConnected() && current_match_id > 0) {
         std::cout << "[UI] Sending RESIGN message to server (match_id=" << current_match_id << ")" << std::endl;
+
+        // Set flag to wait for MATCH_END response from server
+        waiting_for_match_end_resignation_ = true;
+
         network->sendResign(current_match_id);
 
         // Show surrender notification
@@ -449,13 +453,13 @@ void UIManager::resignMatch() {
             "║   match and accepted          ║\n"
             "║   defeat.                     ║\n"
             "║                               ║\n"
-            "║   Returning to lobby...       ║\n"
+            "║   Waiting for confirmation... ║\n"
             "║                               ║\n"
             "╚═══════════════════════════════╝"
         );
 
-        // Return to lobby after notification
-        showScreen(SCREEN_LOBBY);
+        // NOTE: Will return to lobby when MATCH_END message is received
+        // (handled in handleMatchEnd callback)
     } else {
         std::cout << "[UI] Not in multiplayer match, cannot resign" << std::endl;
     }

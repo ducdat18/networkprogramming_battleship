@@ -116,6 +116,9 @@ bool Server::start() {
     std::thread accept_thread(&Server::acceptConnections, this);
     accept_thread.detach();
 
+    // Start timeout checker thread
+    timeout_checker_thread_ = std::thread(&Server::timeoutCheckerThread, this);
+
     return true;
 }
 
@@ -158,6 +161,11 @@ void Server::stop() {
 
     std::cout << "[SERVER] Stopping server..." << std::endl;
     running_ = false;
+
+    // Wait for timeout checker thread to finish
+    if (timeout_checker_thread_.joinable()) {
+        timeout_checker_thread_.join();
+    }
 
     // Close all client connections
     {
@@ -439,4 +447,22 @@ bool Server::routeMessage(ClientConnection* client,
     // No handler found
     std::cerr << "[ROUTER] No handler for message type=" << (int)header.type << std::endl;
     return false;
+}
+
+void Server::timeoutCheckerThread() {
+    std::cout << "[TIMEOUT-CHECKER] Thread started" << std::endl;
+
+    while (running_) {
+        // Check turn timeouts every 2 seconds
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+
+        if (!running_) break;
+
+        // Call gameplay handler to check timeouts
+        if (gameplay_handler_) {
+            gameplay_handler_->checkTurnTimeouts();
+        }
+    }
+
+    std::cout << "[TIMEOUT-CHECKER] Thread stopped" << std::endl;
 }

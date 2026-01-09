@@ -30,7 +30,8 @@
       "Bash(tee:*)",
       "Bash(./run_integration_tests.sh:*)",
       "Bash(dos2unix:*)",
-      "Bash(bash run_integration_tests.sh:*)"
+      "Bash(bash run_integration_tests.sh:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []

@@ -7,6 +7,7 @@
 #include <mutex>
 #include <memory>
 #include <atomic>
+#include <thread>
 #include "protocol.h"
 
 // Forward declarations
@@ -64,6 +65,9 @@ private:
                      const MessageHeader& header,
                      const std::string& payload);
 
+    // Background tasks
+    void timeoutCheckerThread();  // Background thread for turn timeouts
+
     // Configuration
     int port_;
     int server_fd_;
@@ -88,6 +92,9 @@ private:
     // Message handlers
     std::vector<MessageHandler*> handlers_;
     std::mutex handlers_mutex_;
+
+    // Background threads
+    std::thread timeout_checker_thread_;
 };
 
 #endif // SERVER_H

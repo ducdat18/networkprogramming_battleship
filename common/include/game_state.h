@@ -82,6 +82,7 @@ public:
     uint32_t current_turn_player_id;
     int turn_number;
     int turn_time_limit;  // seconds
+    uint64_t turn_start_time;  // unix timestamp when current turn started
 
     std::vector<Move> move_history;
 
@@ -101,6 +102,8 @@ public:
     void startMatch();
     void endMatch(uint32_t winner_id);
     void switchTurn();
+    bool isTurnTimedOut() const;  // Check if current turn has exceeded time limit
+    uint32_t getTurnTimeRemaining() const;  // Get seconds remaining in current turn
 
     // Move processing
     ShotResult processMove(uint32_t player_id, Coordinate target);

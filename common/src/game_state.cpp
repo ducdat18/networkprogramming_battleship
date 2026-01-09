@@ -187,8 +187,8 @@ void Board::randomPlacement() {
 
 // MatchState implementation
 MatchState::MatchState()
-    : current_turn_player_id(0), turn_number(0), turn_time_limit(20),
-      start_time(0), end_time(0), result(RESULT_DRAW), winner_id(0),
+    : current_turn_player_id(0), turn_number(0), turn_time_limit(60),
+      turn_start_time(0), start_time(0), end_time(0), result(RESULT_DRAW), winner_id(0),
       is_active(false), is_paused(false) {
 }
 
@@ -198,6 +198,7 @@ MatchState::~MatchState() {
 void MatchState::startMatch() {
     is_active = true;
     start_time = time(NULL);
+    turn_start_time = time(NULL);
     turn_number = 1;
 }
 
@@ -218,6 +219,7 @@ void MatchState::endMatch(uint32_t winner) {
 void MatchState::switchTurn() {
     current_turn_player_id = (current_turn_player_id == player1_id) ? player2_id : player1_id;
     turn_number++;
+    turn_start_time = time(NULL);  // Reset timer for new turn
 }
 
 ShotResult MatchState::processMove(uint32_t player_id, Coordinate target) {
@@ -260,4 +262,30 @@ ShotResult MatchState::processMove(uint32_t player_id, Coordinate target) {
 
 void MatchState::addMoveToHistory(const Move& move) {
     move_history.push_back(move);
+}
+
+bool MatchState::isTurnTimedOut() const {
+    if (!is_active || is_paused || turn_start_time == 0) {
+        return false;
+    }
+
+    uint64_t current_time = time(NULL);
+    uint64_t elapsed = current_time - turn_start_time;
+
+    return elapsed >= static_cast<uint64_t>(turn_time_limit);
+}
+
+uint32_t MatchState::getTurnTimeRemaining() const {
+    if (!is_active || is_paused || turn_start_time == 0) {
+        return turn_time_limit;
+    }
+
+    uint64_t current_time = time(NULL);
+    uint64_t elapsed = current_time - turn_start_time;
+
+    if (elapsed >= static_cast<uint64_t>(turn_time_limit)) {
+        return 0;
+    }
+
+    return turn_time_limit - elapsed;
 }
