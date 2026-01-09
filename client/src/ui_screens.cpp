@@ -1,4 +1,5 @@
 #include "ui_manager.h"
+#include "messages/replay_messages.h"
 #include <iostream>
 
 #define CELL_SIZE 45
@@ -830,29 +831,267 @@ GtkWidget* UIManager::createShipPlacementScreen() {
 }
 
 GtkWidget* UIManager::createReplayScreen() {
-    // FR-022: Replay screen
-    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    // FR-022: Replay screen with match history
+    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_margin_start(main_box, 20);
     gtk_widget_set_margin_end(main_box, 20);
     gtk_widget_set_margin_top(main_box, 20);
     gtk_widget_set_margin_bottom(main_box, 20);
 
-    GtkWidget* title = gtk_label_new("MATCH REPLAY");
+    // Header
+    GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    
+    GtkWidget* title = gtk_label_new("╔═══ MATCH REPLAYS ═══╗");
     GtkStyleContext* title_context = gtk_widget_get_style_context(title);
     gtk_style_context_add_class(title_context, "title");
 
-    GtkWidget* info = gtk_label_new("Match replay functionality\nComing soon in full version");
-
-    GtkWidget* back_btn = gtk_button_new_with_label("BACK TO MENU");
-    gtk_widget_set_size_request(back_btn, 200, 50);
+    GtkWidget* back_btn = gtk_button_new_with_label("[ BACK ]");
+    gtk_widget_set_size_request(back_btn, 100, 36);
     g_signal_connect(back_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
-        ui->showScreen(SCREEN_MAIN_MENU);
+        ui->showScreen(SCREEN_LOBBY);
     }), this);
 
-    gtk_box_pack_start(GTK_BOX(main_box), title, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(main_box), info, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(main_box), back_btn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(header), title, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(header), back_btn, FALSE, FALSE, 0);
+
+    // Content area
+    GtkWidget* content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 15);
+
+    // Create list store for matches
+    GtkListStore* match_store = gtk_list_store_new(8,
+        G_TYPE_UINT,      // match_id
+        G_TYPE_STRING,    // opponent
+        G_TYPE_STRING,    // result (Win/Loss/Draw)
+        G_TYPE_STRING,    // elo change
+        G_TYPE_STRING,    // date
+        G_TYPE_STRING,    // duration
+        G_TYPE_UINT,      // total moves
+        G_TYPE_STRING);   // end reason
+
+    // Create tree view
+    GtkWidget* tree_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(match_store));
+    g_object_unref(match_store);
+
+    // Add columns
+    GtkCellRenderer* renderer;
+    GtkTreeViewColumn* column;
+
+    // Opponent column
+    renderer = gtk_cell_renderer_text_new();
+    column = gtk_tree_view_column_new_with_attributes("Opponent", renderer,
+                                                       "text", 1, NULL);
+    gtk_tree_view_column_set_expand(column, TRUE);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
+
+    // Result column
+    renderer = gtk_cell_renderer_text_new();
+    column = gtk_tree_view_column_new_with_attributes("Result", renderer,
+                                                       "text", 2, NULL);
+    gtk_tree_view_column_set_min_width(column, 80);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
+
+    // ELO Change column
+    renderer = gtk_cell_renderer_text_new();
+    column = gtk_tree_view_column_new_with_attributes("ELO", renderer,
+                                                       "text", 3, NULL);
+    gtk_tree_view_column_set_min_width(column, 60);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
+
+    // Date column
+    renderer = gtk_cell_renderer_text_new();
+    column = gtk_tree_view_column_new_with_attributes("Date", renderer,
+                                                       "text", 4, NULL);
+    gtk_tree_view_column_set_min_width(column, 120);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
+
+    // Duration column
+    renderer = gtk_cell_renderer_text_new();
+    column = gtk_tree_view_column_new_with_attributes("Duration", renderer,
+                                                       "text", 5, NULL);
+    gtk_tree_view_column_set_min_width(column, 80);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
+
+    // Moves column
+    renderer = gtk_cell_renderer_text_new();
+    column = gtk_tree_view_column_new_with_attributes("Moves", renderer,
+                                                       "text", 6, NULL);
+    gtk_tree_view_column_set_min_width(column, 60);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
+
+    // Scrolled window
+    GtkWidget* scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
+                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_size_request(scroll, -1, 400);
+    gtk_container_add(GTK_CONTAINER(scroll), tree_view);
+
+    // Buttons
+    GtkWidget* button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_halign(button_box, GTK_ALIGN_CENTER);
+
+    GtkWidget* refresh_btn = gtk_button_new_with_label("[ REFRESH ]");
+    gtk_widget_set_size_request(refresh_btn, 150, 40);
+    
+    // Store match_store in button data so we can access it in callback
+    g_object_set_data(G_OBJECT(refresh_btn), "match_store", match_store);
+    g_object_ref(match_store);  // Keep reference alive
+    
+    g_signal_connect(refresh_btn, "clicked", G_CALLBACK(+[](GtkButton* btn, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        GtkListStore* store = GTK_LIST_STORE(g_object_get_data(G_OBJECT(btn), "match_store"));
+        
+        // Clear existing data
+        gtk_list_store_clear(store);
+        
+        // Request from server
+        ui->network->requestReplayList([ui, store](bool success, const std::vector<ReplayMatchInfo>& matches) {
+            if (success && !matches.empty()) {
+                struct ReplayLoadData {
+                    GtkListStore* store;
+                    std::vector<ReplayMatchInfo>* matches;
+                    uint32_t my_user_id;
+                };
+                
+                auto* load_data = new ReplayLoadData{
+                    store,
+                    new std::vector<ReplayMatchInfo>(matches),
+                    ui->getCurrentUserId()
+                };
+                
+                g_idle_add(+[](gpointer data) -> gboolean {
+                    auto* load_data = static_cast<ReplayLoadData*>(data);
+                    GtkListStore* list_store = load_data->store;
+                    std::vector<ReplayMatchInfo>* match_list = load_data->matches;
+                    uint32_t my_user_id = load_data->my_user_id;
+                    
+                    for (const auto& match : *match_list) {
+                        GtkTreeIter iter;
+                        gtk_list_store_append(list_store, &iter);
+                        
+                        // Determine opponent name and result
+                        bool is_player1 = (match.player1_id == my_user_id);
+                        const char* opponent = is_player1 ? match.player2_name : match.player1_name;
+                        
+                        const char* result;
+                        char elo_change[16];
+                        if (match.winner_id == 0) {
+                            result = "Draw";
+                            snprintf(elo_change, sizeof(elo_change), "0");
+                        } else if ((is_player1 && match.winner_id == match.player1_id) ||
+                                  (!is_player1 && match.winner_id == match.player2_id)) {
+                            result = "Victory";
+                            int32_t elo_diff = is_player1 ? 
+                                (match.player1_elo_after - match.player1_elo_before) :
+                                (match.player2_elo_after - match.player2_elo_before);
+                            snprintf(elo_change, sizeof(elo_change), "+%d", elo_diff);
+                        } else {
+                            result = "Defeat";
+                            int32_t elo_diff = is_player1 ?
+                                (match.player1_elo_after - match.player1_elo_before) :
+                                (match.player2_elo_after - match.player2_elo_before);
+                            snprintf(elo_change, sizeof(elo_change), "%d", elo_diff);
+                        }
+                        
+                        // Format date
+                        char date_str[64];
+                        time_t t = match.created_at;
+                        struct tm* tm_info = localtime(&t);
+                        strftime(date_str, sizeof(date_str), "%Y-%m-%d %H:%M", tm_info);
+                        
+                        // Format duration
+                        char duration_str[32];
+                        uint32_t mins = match.duration_seconds / 60;
+                        uint32_t secs = match.duration_seconds % 60;
+                        snprintf(duration_str, sizeof(duration_str), "%um %us", mins, secs);
+                        
+                        gtk_list_store_set(list_store, &iter,
+                                          0, match.match_id,
+                                          1, opponent,
+                                          2, result,
+                                          3, elo_change,
+                                          4, date_str,
+                                          5, duration_str,
+                                          6, match.total_moves,
+                                          7, match.end_reason,
+                                          -1);
+                    }
+                    
+                    delete match_list;
+                    delete load_data;
+                    return G_SOURCE_REMOVE;
+                }, load_data);
+                
+                std::cout << "[REPLAY] Loaded " << matches.size() << " matches" << std::endl;
+            } else {
+                ui->showNotification("No match history available");
+            }
+        });
+        
+        ui->showNotification("Loading match history...");
+    }), this);
+
+    GtkWidget* watch_btn = gtk_button_new_with_label("[ WATCH REPLAY ]");
+    gtk_widget_set_size_request(watch_btn, 150, 40);
+    gtk_widget_set_sensitive(watch_btn, FALSE);  // Disabled until selection
+    
+    // Store tree_view in button data
+    g_object_set_data(G_OBJECT(watch_btn), "tree_view", tree_view);
+    
+    g_signal_connect(watch_btn, "clicked", G_CALLBACK(+[](GtkButton* btn, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        GtkTreeView* tree = GTK_TREE_VIEW(g_object_get_data(G_OBJECT(btn), "tree_view"));
+        
+        GtkTreeSelection* selection = gtk_tree_view_get_selection(tree);
+        GtkTreeIter iter;
+        GtkTreeModel* model;
+        
+        if (gtk_tree_selection_get_selected(selection, &model, &iter)) {
+            guint match_id;
+            gtk_tree_model_get(model, &iter, 0, &match_id, -1);
+            
+            std::cout << "[REPLAY] Opening replay viewer for match " << match_id << std::endl;
+            
+            // Switch to replay viewer screen
+            if (ui->current_screen) {
+                gtk_widget_destroy(ui->current_screen);
+            }
+            ui->current_screen = ui->createReplayViewerScreen(match_id);
+            gtk_container_add(GTK_CONTAINER(ui->main_window), ui->current_screen);
+            gtk_widget_show_all(ui->current_screen);
+        }
+    }), this);
+    
+    // Enable watch button when a row is selected
+    GtkTreeSelection* selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(tree_view));
+    g_signal_connect(selection, "changed", G_CALLBACK(+[](GtkTreeSelection* sel, gpointer data) {
+        GtkWidget* button = GTK_WIDGET(data);
+        GtkTreeIter iter;
+        GtkTreeModel* model;
+        
+        if (gtk_tree_selection_get_selected(sel, &model, &iter)) {
+            gtk_widget_set_sensitive(button, TRUE);
+        } else {
+            gtk_widget_set_sensitive(button, FALSE);
+        }
+    }), watch_btn);
+
+    gtk_box_pack_start(GTK_BOX(button_box), refresh_btn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(button_box), watch_btn, FALSE, FALSE, 0);
+
+    // Auto-load match history on screen open
+    g_timeout_add(100, +[](gpointer data) -> gboolean {
+        GtkButton* btn = GTK_BUTTON(data);
+        gtk_button_clicked(btn);
+        return G_SOURCE_REMOVE;
+    }, refresh_btn);
+
+    // Pack everything
+    gtk_box_pack_start(GTK_BOX(content), scroll, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(content), button_box, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(main_box), header, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), content, TRUE, TRUE, 0);
 
     return main_box;
 }
@@ -896,6 +1135,202 @@ GtkWidget* UIManager::createProfileScreen() {
     gtk_box_pack_start(GTK_BOX(main_box), title, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(main_box), stats_box, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(main_box), back_btn, FALSE, FALSE, 0);
+
+    return main_box;
+}
+
+GtkWidget* UIManager::createReplayViewerScreen(uint32_t match_id) {
+    // Main container
+    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 15);
+    gtk_widget_set_margin_start(main_box, 40);
+    gtk_widget_set_margin_end(main_box, 40);
+    gtk_widget_set_margin_top(main_box, 30);
+    gtk_widget_set_margin_bottom(main_box, 30);
+
+    // Header with title and back button
+    GtkWidget* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    
+    char title_text[128];
+    snprintf(title_text, sizeof(title_text), "╔═══════ REPLAY VIEWER: Match #%u ═══════╗", match_id);
+    GtkWidget* title = gtk_label_new(title_text);
+    GtkStyleContext* title_context = gtk_widget_get_style_context(title);
+    gtk_style_context_add_class(title_context, "title");
+
+    GtkWidget* back_btn = gtk_button_new_with_label("[ BACK TO LIST ]");
+    gtk_widget_set_size_request(back_btn, 150, 40);
+    g_signal_connect(back_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->showScreen(SCREEN_REPLAY);
+    }), this);
+
+    gtk_box_pack_start(GTK_BOX(header), title, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(header), back_btn, FALSE, FALSE, 0);
+
+    // Match info section
+    GtkWidget* info_frame = gtk_frame_new("Match Information");
+    gtk_frame_set_shadow_type(GTK_FRAME(info_frame), GTK_SHADOW_ETCHED_IN);
+    gtk_widget_set_margin_top(info_frame, 10);
+    gtk_widget_set_margin_bottom(info_frame, 10);
+    
+    GtkWidget* info_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_set_margin_start(info_box, 15);
+    gtk_widget_set_margin_end(info_box, 15);
+    gtk_widget_set_margin_top(info_box, 15);
+    gtk_widget_set_margin_bottom(info_box, 15);
+    
+    GtkWidget* match_id_label = gtk_label_new(NULL);
+    char match_id_text[128];
+    snprintf(match_id_text, sizeof(match_id_text), "<b>Match ID:</b> %u", match_id);
+    gtk_label_set_markup(GTK_LABEL(match_id_label), match_id_text);
+    gtk_label_set_xalign(GTK_LABEL(match_id_label), 0.0);
+    
+    GtkWidget* players_label = gtk_label_new("<b>Players:</b> Loading...");
+    gtk_label_set_markup(GTK_LABEL(players_label), "<b>Players:</b> Loading...");
+    gtk_label_set_xalign(GTK_LABEL(players_label), 0.0);
+    
+    GtkWidget* result_label = gtk_label_new("<b>Result:</b> Loading...");
+    gtk_label_set_markup(GTK_LABEL(result_label), "<b>Result:</b> Loading...");
+    gtk_label_set_xalign(GTK_LABEL(result_label), 0.0);
+    
+    GtkWidget* duration_label = gtk_label_new("<b>Duration:</b> Loading...");
+    gtk_label_set_markup(GTK_LABEL(duration_label), "<b>Duration:</b> Loading...");
+    gtk_label_set_xalign(GTK_LABEL(duration_label), 0.0);
+    
+    GtkWidget* moves_label = gtk_label_new("<b>Total Moves:</b> Loading...");
+    gtk_label_set_markup(GTK_LABEL(moves_label), "<b>Total Moves:</b> Loading...");
+    gtk_label_set_xalign(GTK_LABEL(moves_label), 0.0);
+    
+    gtk_box_pack_start(GTK_BOX(info_box), match_id_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(info_box), players_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(info_box), result_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(info_box), duration_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(info_box), moves_label, FALSE, FALSE, 0);
+    
+    gtk_container_add(GTK_CONTAINER(info_frame), info_box);
+
+    // Move history section
+    GtkWidget* moves_frame = gtk_frame_new("Move History");
+    gtk_frame_set_shadow_type(GTK_FRAME(moves_frame), GTK_SHADOW_ETCHED_IN);
+    
+    GtkWidget* scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
+                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_size_request(scroll, -1, 300);
+    
+    GtkWidget* moves_text = gtk_text_view_new();
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(moves_text), FALSE);
+    gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(moves_text), FALSE);
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(moves_text), GTK_WRAP_WORD);
+    
+    GtkTextBuffer* buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(moves_text));
+    gtk_text_buffer_set_text(buffer, "Loading replay data from server...\n\nPlease wait...", -1);
+    
+    gtk_container_add(GTK_CONTAINER(scroll), moves_text);
+    gtk_container_add(GTK_CONTAINER(moves_frame), scroll);
+
+    // Playback controls
+    GtkWidget* controls_frame = gtk_frame_new("Playback Controls");
+    gtk_frame_set_shadow_type(GTK_FRAME(controls_frame), GTK_SHADOW_ETCHED_IN);
+    gtk_widget_set_margin_top(controls_frame, 10);
+    
+    GtkWidget* controls_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_set_margin_start(controls_box, 15);
+    gtk_widget_set_margin_end(controls_box, 15);
+    gtk_widget_set_margin_top(controls_box, 15);
+    gtk_widget_set_margin_bottom(controls_box, 15);
+    
+    // Buttons row
+    GtkWidget* buttons_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_halign(buttons_row, GTK_ALIGN_CENTER);
+    
+    GtkWidget* play_btn = gtk_button_new_with_label("▶ PLAY");
+    gtk_widget_set_size_request(play_btn, 120, 40);
+    gtk_widget_set_sensitive(play_btn, FALSE);
+    
+    GtkWidget* pause_btn = gtk_button_new_with_label("⏸ PAUSE");
+    gtk_widget_set_size_request(pause_btn, 120, 40);
+    gtk_widget_set_sensitive(pause_btn, FALSE);
+    
+    GtkWidget* reset_btn = gtk_button_new_with_label("⏮ RESET");
+    gtk_widget_set_size_request(reset_btn, 120, 40);
+    gtk_widget_set_sensitive(reset_btn, FALSE);
+    
+    gtk_box_pack_start(GTK_BOX(buttons_row), play_btn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(buttons_row), pause_btn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(buttons_row), reset_btn, FALSE, FALSE, 0);
+    
+    // Speed control
+    GtkWidget* speed_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_halign(speed_box, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(speed_box, 10);
+    
+    GtkWidget* speed_label = gtk_label_new("Playback Speed:");
+    GtkWidget* speed_scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0.5, 3.0, 0.5);
+    gtk_widget_set_size_request(speed_scale, 300, -1);
+    gtk_range_set_value(GTK_RANGE(speed_scale), 1.0);
+    gtk_widget_set_sensitive(speed_scale, FALSE);
+    GtkWidget* speed_value = gtk_label_new("1.0x");
+    
+    gtk_box_pack_start(GTK_BOX(speed_box), speed_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(speed_box), speed_scale, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(speed_box), speed_value, FALSE, FALSE, 0);
+    
+    // Progress
+    GtkWidget* progress_label = gtk_label_new("Move: 0 / 0");
+    gtk_widget_set_halign(progress_label, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(progress_label, 10);
+    
+    gtk_box_pack_start(GTK_BOX(controls_box), buttons_row, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(controls_box), speed_box, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(controls_box), progress_label, FALSE, FALSE, 0);
+    
+    gtk_container_add(GTK_CONTAINER(controls_frame), controls_box);
+
+    // Pack all sections
+    gtk_box_pack_start(GTK_BOX(main_box), header, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), info_frame, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), moves_frame, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), controls_frame, FALSE, FALSE, 0);
+
+    // TODO: Load actual replay data from server
+    // For now, show demo text after a short delay
+    g_timeout_add(500, +[](gpointer data) -> gboolean {
+        GtkTextView* text_view = GTK_TEXT_VIEW(data);
+        GtkTextBuffer* buf = gtk_text_view_get_buffer(text_view);
+        
+        const char* demo_text = 
+            "╔════════════════════════════════════════╗\n"
+            "║  REPLAY DATA - DEMO MODE               ║\n"
+            "╚════════════════════════════════════════╝\n\n"
+            "This is a placeholder for replay functionality.\n\n"
+            "📋 GAME SUMMARY:\n"
+            "• Match started: 2026-01-09 14:30:00\n"
+            "• Duration: 15 minutes 30 seconds\n"
+            "• Total moves: 42\n"
+            "• Winner: Player 1\n\n"
+            "🎯 MOVE HISTORY:\n"
+            "Move 1:  Player 1 → A5 [MISS]\n"
+            "Move 2:  Player 2 → C3 [HIT]\n"
+            "Move 3:  Player 1 → B7 [HIT]\n"
+            "Move 4:  Player 2 → E9 [MISS]\n"
+            "Move 5:  Player 1 → B8 [HIT - Destroyer sunk!]\n"
+            "Move 6:  Player 2 → F4 [MISS]\n"
+            "...\n\n"
+            "⚓ SHIP STATUS:\n"
+            "Player 1: All ships surviving\n"
+            "Player 2: 3 ships sunk, 2 surviving\n\n"
+            "📊 STATISTICS:\n"
+            "Player 1: 24 shots, 18 hits (75% accuracy)\n"
+            "Player 2: 18 shots, 8 hits (44% accuracy)\n\n"
+            "🏆 RESULT:\n"
+            "Player 1 Victory by Ship Elimination\n"
+            "ELO Change: Player 1 (+15), Player 2 (-15)\n";
+        
+        gtk_text_buffer_set_text(buf, demo_text, -1);
+        return G_SOURCE_REMOVE;
+    }, moves_text);
+    
+    std::cout << "[REPLAY_VIEWER] Created simple text viewer for match " << match_id << std::endl;
 
     return main_box;
 }

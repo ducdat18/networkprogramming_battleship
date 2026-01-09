@@ -86,6 +86,21 @@ void PlayerManager::updatePlayerStatus(uint32_t user_id, PlayerStatus status) {
     broadcastPlayerStatusUpdate(user_id, status);
 }
 
+void PlayerManager::updatePlayerElo(uint32_t user_id, int32_t new_elo) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = players_.find(user_id);
+        if (it != players_.end()) {
+            it->second.elo_rating = new_elo;
+            std::cout << "[PLAYER_MANAGER] Updated ELO for "
+                      << it->second.display_name
+                      << ": " << new_elo << std::endl;
+        }
+    }
+    // Broadcast updated status with new ELO to all clients
+    broadcastPlayerStatusUpdate(user_id, getPlayerStatus(user_id));
+}
+
 PlayerStatus PlayerManager::getPlayerStatus(uint32_t user_id) const {
     std::lock_guard<std::mutex> lock(mutex_);
 

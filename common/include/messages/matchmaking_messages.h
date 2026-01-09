@@ -146,4 +146,29 @@ struct MatchReadyMessage {
     }
 } __attribute__((packed));
 
+// ============== MATCHMAKING QUEUE ==============
+
+struct QueueJoinMessage {
+    uint32_t time_limit;      // Match time limit preference
+
+    QueueJoinMessage() : time_limit(60) {}
+} __attribute__((packed));
+
+struct QueueLeaveMessage {
+    QueueLeaveMessage() {}
+} __attribute__((packed));
+
+struct QueueStatusMessage {
+    bool in_queue;
+    uint32_t queue_position;
+    uint32_t wait_time_seconds;
+    uint32_t players_in_queue;
+    int32_t elo_range_min;
+    int32_t elo_range_max;
+
+    QueueStatusMessage() : in_queue(false), queue_position(0),
+                          wait_time_seconds(0), players_in_queue(0),
+                          elo_range_min(0), elo_range_max(0) {}
+} __attribute__((packed));
+
 #endif // MATCHMAKING_MESSAGES_H

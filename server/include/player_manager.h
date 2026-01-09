@@ -35,6 +35,9 @@ public:
     // Update player status
     void updatePlayerStatus(uint32_t user_id, PlayerStatus status);
 
+    // Update cached ELO rating for a player
+    void updatePlayerElo(uint32_t user_id, int32_t new_elo);
+
     // Get player status
     PlayerStatus getPlayerStatus(uint32_t user_id) const;
 

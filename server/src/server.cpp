@@ -5,9 +5,12 @@
 #include "player_handler.h"
 #include "challenge_handler.h"
 #include "gameplay_handler.h"
+#include "matchmaking_handler.h"
+#include "replay_handler.h"
 #include "database.h"
 #include "player_manager.h"
 #include "challenge_manager.h"
+#include "matchmaking_manager.h"
 #include <iostream>
 #include <cstring>
 #include <thread>
@@ -24,45 +27,76 @@ Server::Server(int port)
     , player_manager_(nullptr)
     , challenge_manager_(nullptr)
     , gameplay_handler_(nullptr)
+    , matchmaking_mgr_(nullptr)
+    , matchmaking_handler_(nullptr)
     , total_connections_(0)
     , active_matches_(0)
 {
+    std::cout << "[SERVER] Initializing database..." << std::endl;
     // Initialize database
-    db_ = new DatabaseManager("data/battleship.db");
-    if (!db_->isOpen()) {
-        std::cerr << "[SERVER] Failed to open database!" << std::endl;
-        delete db_;
+    try {
+        db_ = new DatabaseManager("data/battleship.db");
+        if (!db_->isOpen()) {
+            std::cerr << "[SERVER] Failed to open database!" << std::endl;
+            // Don't delete here - destructor already cleaned up
+            // Just null out the pointer since DatabaseManager constructor failed
+            db_ = nullptr;
+        } else {
+            std::cout << "[SERVER] Database initialized successfully" << std::endl;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[SERVER] Exception during database initialization: " << e.what() << std::endl;
         db_ = nullptr;
-    } else {
-        std::cout << "[SERVER] Database initialized successfully" << std::endl;
     }
 
+    std::cout << "[SERVER] Initializing player manager..." << std::endl;
     // Initialize player manager
     player_manager_ = new PlayerManager(this);
+    std::cout << "[SERVER] Player manager initialized" << std::endl;
 
+    std::cout << "[SERVER] Initializing challenge manager..." << std::endl;
     // Initialize challenge manager
     challenge_manager_ = new ChallengeManager(this, player_manager_);
+    std::cout << "[SERVER] Challenge manager initialized" << std::endl;
 
     // Initialize gameplay handler
     if (db_ && db_->isOpen()) {
+        std::cout << "[SERVER] Initializing gameplay handler..." << std::endl;
         gameplay_handler_ = new GameplayHandler(this, db_);
         std::cout << "[SERVER] Gameplay handler initialized successfully" << std::endl;
     }
+
+    // Initialize matchmaking manager
+    if (db_ && db_->isOpen() && player_manager_) {
+        std::cout << "[SERVER] Initializing matchmaking manager..." << std::endl;
+        matchmaking_mgr_ = new MatchmakingManager(this, player_manager_, db_);
+        std::cout << "[SERVER] Matchmaking manager created" << std::endl;
+
+        std::cout << "[SERVER] Initializing matchmaking handler..." << std::endl;
+        matchmaking_handler_ = new MatchmakingHandler(this, matchmaking_mgr_, db_);
+        std::cout << "[SERVER] Matchmaking system initialized successfully" << std::endl;
+    }
+
+    std::cout << "[SERVER] Constructor completed" << std::endl;
 }
 
 Server::~Server() {
     stop();
 
-    // Cleanup handlers
+    // Cleanup handlers (this will delete gameplay_handler_ and matchmaking_handler_ too)
     for (auto handler : handlers_) {
         delete handler;
     }
     handlers_.clear();
 
-    // Cleanup gameplay handler
-    if (gameplay_handler_) {
-        delete gameplay_handler_;
-        gameplay_handler_ = nullptr;
+    // Reset pointers (already deleted above)
+    gameplay_handler_ = nullptr;
+    matchmaking_handler_ = nullptr;
+
+    // Cleanup matchmaking manager
+    if (matchmaking_mgr_) {
+        delete matchmaking_mgr_;
+        matchmaking_mgr_ = nullptr;
     }
 
     // Cleanup challenge manager
@@ -112,6 +146,12 @@ bool Server::start() {
 
     running_ = true;
 
+    // Start matchmaking system
+    if (matchmaking_mgr_) {
+        matchmaking_mgr_->start();
+        std::cout << "[SERVER] Matchmaking system started" << std::endl;
+    }
+
     // Start accept thread
     std::thread accept_thread(&Server::acceptConnections, this);
     accept_thread.detach();
@@ -148,6 +188,16 @@ void Server::setupHandlers() {
         handlers_.push_back(gameplay_handler_);
     }
 
+    // Add matchmaking handler
+    if (matchmaking_handler_) {
+        handlers_.push_back(matchmaking_handler_);
+    }
+
+    // Add replay handler
+    if (db_ && db_->isOpen()) {
+        handlers_.push_back(new ReplayHandler(this, db_));
+    }
+
     std::cout << "[SERVER] " << handlers_.size() << " handlers registered" << std::endl;
 }
 
@@ -158,6 +208,12 @@ void Server::stop() {
 
     std::cout << "[SERVER] Stopping server..." << std::endl;
     running_ = false;
+
+    // Stop matchmaking system
+    if (matchmaking_mgr_) {
+        matchmaking_mgr_->stop();
+        std::cout << "[SERVER] Matchmaking system stopped" << std::endl;
+    }
 
     // Close all client connections
     {
@@ -344,6 +400,11 @@ void Server::removeClient(int client_fd) {
             gameplay_handler_->handlePlayerDisconnect(user_id);
         }
 
+        // Remove from matchmaking queue if in queue
+        if (matchmaking_mgr_) {
+            matchmaking_mgr_->leaveQueue(user_id);
+        }
+
         // Remove from player manager and broadcast offline status
         std::cout << "[CLEANUP] Broadcasting offline status for user_id=" << user_id << std::endl;
         player_manager_->removePlayer(user_id);
@@ -418,6 +479,12 @@ bool Server::routeMessage(ClientConnection* client,
                          const std::string& payload) {
     std::lock_guard<std::mutex> lock(handlers_mutex_);
 
+    MessageType msg_type = static_cast<MessageType>(header.type);
+    
+    std::cout << "[ROUTER] Routing message type=" << (int)header.type 
+              << " (" << messageTypeToString(msg_type) << "), checking " 
+              << handlers_.size() << " handlers" << std::endl;
+
     // Try PING/PONG first (keep for backwards compatibility)
     if (header.type == static_cast<uint8_t>(PING)) {
         MessageHeader pong_header;
@@ -431,12 +498,14 @@ bool Server::routeMessage(ClientConnection* client,
 
     // Route to registered handlers
     for (auto handler : handlers_) {
-        if (handler->canHandle(static_cast<MessageType>(header.type))) {
+        if (handler->canHandle(msg_type)) {
+            std::cout << "[ROUTER] Handler found for type=" << (int)header.type << std::endl;
             return handler->handleMessage(client, header, payload);
         }
     }
 
     // No handler found
-    std::cerr << "[ROUTER] No handler for message type=" << (int)header.type << std::endl;
+    std::cerr << "[ROUTER] No handler for message type=" << (int)header.type 
+              << " (" << messageTypeToString(msg_type) << ")" << std::endl;
     return false;
 }

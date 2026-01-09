@@ -16,6 +16,8 @@ class DatabaseManager;
 class PlayerManager;
 class ChallengeManager;
 class GameplayHandler;
+class MatchmakingManager;
+class MatchmakingHandler;
 
 /**
  * Main server class for Battleship game
@@ -39,6 +41,7 @@ public:
     PlayerManager* getPlayerManager() { return player_manager_; }
     ChallengeManager* getChallengeManager() { return challenge_manager_; }
     GameplayHandler* getGameplayHandler() { return gameplay_handler_; }
+    MatchmakingManager* getMatchmakingManager() { return matchmaking_mgr_; }
     DatabaseManager* getDatabase() { return db_; }
     DatabaseManager* getDatabaseManager() { return db_; }
 
@@ -76,6 +79,8 @@ private:
     PlayerManager* player_manager_;
     ChallengeManager* challenge_manager_;
     GameplayHandler* gameplay_handler_;
+    MatchmakingManager* matchmaking_mgr_;
+    MatchmakingHandler* matchmaking_handler_;
 
     // Client tracking
     std::map<int, std::shared_ptr<ClientConnection>> clients_;

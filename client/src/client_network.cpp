@@ -1,5 +1,6 @@
 #include "client_network.h"
 #include "message_serialization.h"
+#include "messages/replay_messages.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -254,6 +255,10 @@ void ClientNetwork::receiveLoop() {
                 handleChallengeReceived(payload);
                 break;
 
+            case MessageType::QUEUE_STATUS:
+                handleQueueStatus(payload);
+                break;
+
             case MessageType::MATCH_START:
                 handleMatchStart(payload);
                 break;
@@ -284,6 +289,10 @@ void ClientNetwork::receiveLoop() {
 
             case MessageType::DRAW_RESPONSE:
                 handleDrawResponse(payload);
+                break;
+
+            case MessageType::REPLAY_DATA:
+                handleReplayData(payload);
                 break;
 
             case MessageType::PONG:
@@ -674,6 +683,109 @@ void ClientNetwork::respondToChallenge(uint32_t challenge_id, bool accept) {
     sendMessage(header, serialize(resp));
 }
 
+void ClientNetwork::joinQueue(QueueCallback callback) {
+    if (!isAuthenticated()) {
+        std::cerr << "[CLIENT] Not authenticated" << std::endl;
+        if (callback) {
+            callback(false, "Not authenticated");
+        }
+        return;
+    }
+
+    std::cout << "[CLIENT] Joining matchmaking queue" << std::endl;
+    std::cout << "[CLIENT] MessageType::QUEUE_JOIN enum value = " << (int)MessageType::QUEUE_JOIN << std::endl;
+
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        queue_callback_ = callback;
+    }
+
+    pending_request_ = QUEUE_JOIN;
+
+    // Send empty payload for queue join
+    MessageHeader header;
+    memset(&header, 0, sizeof(header));
+    header.type = static_cast<uint8_t>(MessageType::QUEUE_JOIN);
+    header.length = 0;
+    header.timestamp = time(nullptr);
+    safeStrCopy(header.session_token, session_token_, sizeof(header.session_token));
+
+    std::cout << "[CLIENT] Sending QUEUE_JOIN with header.type = " << (int)header.type << std::endl;
+
+    if (!sendMessage(header, "")) {
+        pending_request_ = NONE;
+        if (callback) {
+            callback(false, "Failed to send queue join request");
+        }
+    }
+}
+
+void ClientNetwork::leaveQueue(QueueCallback callback) {
+    if (!isAuthenticated()) {
+        std::cerr << "[CLIENT] Not authenticated" << std::endl;
+        if (callback) {
+            callback(false, "Not authenticated");
+        }
+        return;
+    }
+
+    std::cout << "[CLIENT] Leaving matchmaking queue" << std::endl;
+
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        queue_callback_ = callback;
+    }
+
+    pending_request_ = QUEUE_LEAVE;
+
+    // Send empty payload for queue leave
+    MessageHeader header;
+    header.type = static_cast<uint8_t>(MessageType::QUEUE_LEAVE);
+    header.length = 0;
+    header.timestamp = time(nullptr);
+    safeStrCopy(header.session_token, session_token_, sizeof(header.session_token));
+
+    if (!sendMessage(header, "")) {
+        pending_request_ = NONE;
+        if (callback) {
+            callback(false, "Failed to send queue leave request");
+        }
+    }
+}
+
+void ClientNetwork::requestReplayList(ReplayListCallback callback) {
+    if (!isAuthenticated()) {
+        std::cerr << "[CLIENT] Not authenticated" << std::endl;
+        if (callback) {
+            callback(false, std::vector<ReplayMatchInfo>());
+        }
+        return;
+    }
+
+    std::cout << "[CLIENT] Requesting replay list" << std::endl;
+
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        replay_list_callback_ = callback;
+    }
+
+    pending_request_ = REPLAY_LIST;
+
+    // Send empty payload (server will use authenticated user_id)
+    MessageHeader header;
+    header.type = static_cast<uint8_t>(MessageType::REPLAY_REQUEST);
+    header.length = 0;
+    header.timestamp = time(nullptr);
+    safeStrCopy(header.session_token, session_token_, sizeof(header.session_token));
+
+    if (!sendMessage(header, "")) {
+        pending_request_ = NONE;
+        if (callback) {
+            callback(false, std::vector<ReplayMatchInfo>());
+        }
+    }
+}
+
 // ==================== Event Handler Setters ====================
 
 void ClientNetwork::setPlayerStatusCallback(PlayerStatusCallback callback) {
@@ -719,6 +831,11 @@ void ClientNetwork::setDrawOfferCallback(DrawOfferCallback callback) {
 void ClientNetwork::setDrawResponseCallback(DrawResponseCallback callback) {
     std::lock_guard<std::mutex> lock(callback_mutex_);
     draw_response_callback_ = callback;
+}
+
+void ClientNetwork::setQueueStatusCallback(QueueStatusCallback callback) {
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+    queue_status_callback_ = callback;
 }
 
 // ==================== Gameplay API ====================
@@ -954,6 +1071,29 @@ void ClientNetwork::handleChallengeReceived(const std::string& payload) {
     }
 }
 
+void ClientNetwork::handleQueueStatus(const std::string& payload) {
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+
+    PendingRequest request = pending_request_;
+    
+    if (request == QUEUE_JOIN || request == QUEUE_LEAVE) {
+        pending_request_ = NONE;
+        
+        // Simple success response for queue join/leave
+        if (queue_callback_) {
+            queue_callback_(true, "");
+            queue_callback_ = nullptr;
+        }
+    }
+    
+    // If we have queue status data in the payload, parse it
+    if (payload.size() >= 8 && queue_status_callback_) {
+        uint32_t players_in_queue = *reinterpret_cast<const uint32_t*>(payload.data());
+        uint32_t estimated_wait = *reinterpret_cast<const uint32_t*>(payload.data() + 4);
+        queue_status_callback_(players_in_queue, estimated_wait);
+    }
+}
+
 void ClientNetwork::handleMatchStart(const std::string& payload) {
     MatchStartMessage match;
     if (!deserialize(payload, match)) {
@@ -1077,5 +1217,39 @@ void ClientNetwork::handleDrawResponse(const std::string& payload) {
     std::lock_guard<std::mutex> lock(callback_mutex_);
     if (draw_response_callback_) {
         draw_response_callback_(response.accepted);
+    }
+}
+
+void ClientNetwork::handleReplayData(const std::string& payload) {
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+
+    if (pending_request_ != REPLAY_LIST) {
+        std::cerr << "[CLIENT] Unexpected replay data response" << std::endl;
+        return;
+    }
+
+    pending_request_ = NONE;
+
+    ReplayListResponse resp;
+    if (payload.size() < sizeof(ReplayListResponse)) {
+        std::cerr << "[CLIENT] Invalid replay data payload size" << std::endl;
+        if (replay_list_callback_) {
+            replay_list_callback_(false, std::vector<ReplayMatchInfo>());
+        }
+        return;
+    }
+
+    memcpy(&resp, payload.data(), sizeof(ReplayListResponse));
+
+    std::cout << "[CLIENT] Received " << resp.count << " replay matches" << std::endl;
+
+    // Convert to vector
+    std::vector<ReplayMatchInfo> matches;
+    for (uint32_t i = 0; i < resp.count && i < 50; i++) {
+        matches.push_back(resp.matches[i]);
+    }
+
+    if (replay_list_callback_) {
+        replay_list_callback_(true, matches);
     }
 }

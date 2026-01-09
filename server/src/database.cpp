@@ -119,12 +119,30 @@ bool DatabaseManager::initializeSchema() {
         );
     )";
 
+    // Create match_replays table
+    const char* replays_sql = R"(
+        CREATE TABLE IF NOT EXISTS match_replays (
+            replay_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            match_id INTEGER NOT NULL UNIQUE,
+            player1_elo_before INTEGER NOT NULL,
+            player2_elo_before INTEGER NOT NULL,
+            player1_elo_after INTEGER NOT NULL,
+            player2_elo_after INTEGER NOT NULL,
+            duration_seconds INTEGER NOT NULL,
+            total_moves INTEGER NOT NULL,
+            end_reason TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (match_id) REFERENCES matches(match_id) ON DELETE CASCADE
+        );
+    )";
+
     // Create indexes for performance
     const char* indexes_sql = R"(
         CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(session_token);
         CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
         CREATE INDEX IF NOT EXISTS idx_matches_players ON matches(player1_id, player2_id);
         CREATE INDEX IF NOT EXISTS idx_moves_match ON match_moves(match_id);
+        CREATE INDEX IF NOT EXISTS idx_replays_match ON match_replays(match_id);
     )";
 
     // Execute all schema creation
@@ -133,10 +151,17 @@ bool DatabaseManager::initializeSchema() {
            executeSQL(matches_sql) &&
            executeSQL(boards_sql) &&
            executeSQL(moves_sql) &&
+           executeSQL(replays_sql) &&
            executeSQL(indexes_sql);
 }
 
 bool DatabaseManager::executeSQL(const std::string& sql) {
+    if (!db_) {
+        last_error_ = "Database not initialized";
+        std::cerr << "[DB] SQL error: " << last_error_ << std::endl;
+        return false;
+    }
+
     char* err_msg = nullptr;
     int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &err_msg);
 
@@ -151,6 +176,12 @@ bool DatabaseManager::executeSQL(const std::string& sql) {
 }
 
 sqlite3_stmt* DatabaseManager::prepareStatement(const std::string& sql) {
+    if (!db_) {
+        last_error_ = "Database not initialized";
+        std::cerr << "[DB] Prepare error: " << last_error_ << std::endl;
+        return nullptr;
+    }
+
     sqlite3_stmt* stmt = nullptr;
     int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
 
@@ -661,4 +692,84 @@ std::vector<std::string> DatabaseManager::getMatchMoves(uint32_t match_id) {
 
     sqlite3_finalize(stmt);
     return moves;
+}
+
+bool DatabaseManager::saveReplayData(uint32_t match_id,
+                                     int32_t p1_elo_before, int32_t p2_elo_before,
+                                     int32_t p1_elo_after, int32_t p2_elo_after,
+                                     uint32_t total_moves, uint64_t duration,
+                                     const std::string& end_reason) {
+    if (!db_) return false;
+
+    const char* sql = R"(
+        INSERT INTO match_replays (
+            match_id, player1_elo_before, player2_elo_before,
+            player1_elo_after, player2_elo_after, duration_seconds,
+            total_moves, end_reason, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+    )";
+
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    if (!stmt) return false;
+
+    sqlite3_bind_int(stmt, 1, match_id);
+    sqlite3_bind_int(stmt, 2, p1_elo_before);
+    sqlite3_bind_int(stmt, 3, p2_elo_before);
+    sqlite3_bind_int(stmt, 4, p1_elo_after);
+    sqlite3_bind_int(stmt, 5, p2_elo_after);
+    sqlite3_bind_int64(stmt, 6, duration);
+    sqlite3_bind_int(stmt, 7, total_moves);
+    sqlite3_bind_text(stmt, 8, end_reason.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmt, 9, time(nullptr));
+
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        std::cerr << "[DB] Failed to save replay data: " << sqlite3_errmsg(db_) << std::endl;
+        return false;
+    }
+
+    std::cout << "[DB] Saved replay data for match_id=" << match_id << std::endl;
+    return true;
+}
+
+std::vector<Match> DatabaseManager::getMatchHistory(uint32_t user_id,
+                                                    uint32_t limit,
+                                                    uint32_t offset) {
+    std::vector<Match> matches;
+    if (!db_) return matches;
+
+    const char* sql = R"(
+        SELECT match_id, player1_id, player2_id, winner_id,
+               status, created_at, ended_at
+        FROM matches
+        WHERE (player1_id = ? OR player2_id = ?)
+          AND status = 'completed'
+        ORDER BY ended_at DESC
+        LIMIT ? OFFSET ?;
+    )";
+
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    if (!stmt) return matches;
+
+    sqlite3_bind_int(stmt, 1, user_id);
+    sqlite3_bind_int(stmt, 2, user_id);
+    sqlite3_bind_int(stmt, 3, limit);
+    sqlite3_bind_int(stmt, 4, offset);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        Match match;
+        match.match_id = sqlite3_column_int(stmt, 0);
+        match.player1_id = sqlite3_column_int(stmt, 1);
+        match.player2_id = sqlite3_column_int(stmt, 2);
+        match.winner_id = sqlite3_column_int(stmt, 3);
+        match.status = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+        match.created_at = sqlite3_column_int64(stmt, 5);
+        match.ended_at = sqlite3_column_int64(stmt, 6);
+        matches.push_back(match);
+    }
+
+    sqlite3_finalize(stmt);
+    return matches;
 }

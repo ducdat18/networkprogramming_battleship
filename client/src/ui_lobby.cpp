@@ -253,6 +253,66 @@ GtkWidget* UIManager::createLobbyScreen() {
     gtk_widget_set_margin_top(content, 20);
     gtk_widget_set_margin_bottom(content, 20);
 
+    // Matchmaking section - PIXEL ART STYLE
+    GtkWidget* matchmaking_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_widget_set_margin_bottom(matchmaking_box, 10);
+
+    GtkWidget* matchmaking_label = gtk_label_new(">> RANKED MATCHMAKING");
+    GtkStyleContext* mm_context = gtk_widget_get_style_context(matchmaking_label);
+    gtk_style_context_add_class(mm_context, "glow-text");
+
+    GtkWidget* queue_btn = gtk_button_new_with_label("[ JOIN QUEUE ]");
+    gtk_widget_set_size_request(queue_btn, 140, 40);
+    GtkStyleContext* queue_context = gtk_widget_get_style_context(queue_btn);
+    gtk_style_context_add_class(queue_context, "primary");
+    g_signal_connect(queue_btn, "clicked", G_CALLBACK(+[](GtkButton* btn, gpointer data) {
+        LobbyData* lobby = static_cast<LobbyData*>(data);
+        const char* label = gtk_button_get_label(btn);
+        
+        if (g_strcmp0(label, "[ JOIN QUEUE ]") == 0) {
+            // Join queue
+            lobby->ui->network->joinQueue([lobby, btn](bool success, const std::string& error) {
+                if (success) {
+                    g_idle_add(+[](gpointer data) -> gboolean {
+                        GtkButton* button = GTK_BUTTON(data);
+                        gtk_button_set_label(button, "[ LEAVE QUEUE ]");
+                        GtkStyleContext* ctx = gtk_widget_get_style_context(GTK_WIDGET(button));
+                        gtk_style_context_remove_class(ctx, "primary");
+                        gtk_style_context_add_class(ctx, "danger");
+                        return G_SOURCE_REMOVE;
+                    }, btn);
+                    std::cout << "[LOBBY] Joined matchmaking queue" << std::endl;
+                } else {
+                    std::cerr << "[LOBBY] Failed to join queue: " << error << std::endl;
+                }
+            });
+        } else {
+            // Leave queue
+            lobby->ui->network->leaveQueue([lobby, btn](bool success, const std::string& error) {
+                if (success) {
+                    g_idle_add(+[](gpointer data) -> gboolean {
+                        GtkButton* button = GTK_BUTTON(data);
+                        gtk_button_set_label(button, "[ JOIN QUEUE ]");
+                        GtkStyleContext* ctx = gtk_widget_get_style_context(GTK_WIDGET(button));
+                        gtk_style_context_remove_class(ctx, "danger");
+                        gtk_style_context_add_class(ctx, "primary");
+                        return G_SOURCE_REMOVE;
+                    }, btn);
+                    std::cout << "[LOBBY] Left matchmaking queue" << std::endl;
+                } else {
+                    std::cerr << "[LOBBY] Failed to leave queue: " << error << std::endl;
+                }
+            });
+        }
+    }), lobby);
+
+    GtkWidget* queue_status_label = gtk_label_new("Not in queue");
+    gtk_widget_set_margin_start(queue_status_label, 10);
+
+    gtk_box_pack_start(GTK_BOX(matchmaking_box), matchmaking_label, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(matchmaking_box), queue_status_label, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(matchmaking_box), queue_btn, FALSE, FALSE, 0);
+
     // Header with title and buttons - PIXEL ART STYLE
     GtkWidget* list_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
 
@@ -270,8 +330,16 @@ GtkWidget* UIManager::createLobbyScreen() {
     gtk_widget_set_sensitive(lobby->challenge_btn, FALSE);  // Disabled by default
     g_signal_connect(lobby->challenge_btn, "clicked", G_CALLBACK(on_challenge_clicked), lobby);
 
+    GtkWidget* replay_btn = gtk_button_new_with_label("[ REPLAYS ]");
+    gtk_widget_set_size_request(replay_btn, 110, 34);
+    g_signal_connect(replay_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        LobbyData* lobby = static_cast<LobbyData*>(data);
+        lobby->ui->showScreen(SCREEN_REPLAY);
+    }), lobby);
+
     gtk_box_pack_start(GTK_BOX(list_header), players_label, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(list_header), lobby->challenge_btn, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(list_header), replay_btn, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(list_header), lobby->refresh_btn, FALSE, FALSE, 0);
 
     // Create TreeView for player list
@@ -325,6 +393,7 @@ GtkWidget* UIManager::createLobbyScreen() {
                                    GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
     gtk_container_add(GTK_CONTAINER(scroll), GTK_WIDGET(lobby->player_tree_view));
 
+    gtk_box_pack_start(GTK_BOX(content), matchmaking_box, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(content), list_header, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(content), scroll, TRUE, TRUE, 0);
 

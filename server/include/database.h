@@ -211,6 +211,24 @@ public:
      */
     std::vector<std::string> getMatchMoves(uint32_t match_id);
 
+    // ===== REPLAY OPERATIONS =====
+
+    /**
+     * Save replay metadata for a match
+     */
+    bool saveReplayData(uint32_t match_id,
+                        int32_t p1_elo_before, int32_t p2_elo_before,
+                        int32_t p1_elo_after, int32_t p2_elo_after,
+                        uint32_t total_moves, uint64_t duration,
+                        const std::string& end_reason);
+
+    /**
+     * Get match history for a user (paginated)
+     */
+    std::vector<Match> getMatchHistory(uint32_t user_id,
+                                       uint32_t limit = 20,
+                                       uint32_t offset = 0);
+
     /**
      * Get last error message
      */

@@ -30,6 +30,9 @@ enum MessageType {
     CHALLENGE_RESPONSE = 22,
     MATCH_START = 23,
     MATCH_READY = 24,
+    QUEUE_JOIN = 25,
+    QUEUE_LEAVE = 26,
+    QUEUE_STATUS = 27,
 
     // Gameplay
     SHIP_PLACEMENT = 30,

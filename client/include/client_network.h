@@ -52,6 +52,11 @@ public:
     using SendChallengeCallback = std::function<void(bool success, const std::string& error)>;
     using ChallengeReceivedCallback = std::function<void(const ChallengeReceived& challenge)>;
     using MatchStartCallback = std::function<void(const MatchStartMessage& match)>;
+    using QueueCallback = std::function<void(bool success, const std::string& error)>;
+    using QueueStatusCallback = std::function<void(uint32_t players_in_queue, uint32_t estimated_wait_time)>;
+    
+    // Replay callbacks
+    using ReplayListCallback = std::function<void(bool success, const std::vector<struct ReplayMatchInfo>& matches)>;
 
     // Gameplay callbacks
     using ShipPlacementCallback = std::function<void(bool success, const std::string& error)>;
@@ -89,6 +94,11 @@ public:
     void requestPlayerList(PlayerListCallback callback);
     void sendChallenge(uint32_t target_user_id, uint32_t time_limit, bool random_placement, SendChallengeCallback callback);
     void respondToChallenge(uint32_t challenge_id, bool accept);
+    void joinQueue(QueueCallback callback);
+    void leaveQueue(QueueCallback callback);
+    
+    // Replay API
+    void requestReplayList(ReplayListCallback callback);
 
     // Gameplay API
     void sendShipPlacement(uint32_t match_id, const Ship ships[5], ShipPlacementCallback callback);
@@ -108,6 +118,7 @@ public:
     void setMatchEndCallback(MatchEndCallback callback);
     void setDrawOfferCallback(DrawOfferCallback callback);
     void setDrawResponseCallback(DrawResponseCallback callback);
+    void setQueueStatusCallback(QueueStatusCallback callback);
 
     // Session info
     bool isAuthenticated() const { return status_ == AUTHENTICATED; }
@@ -132,6 +143,7 @@ private:
     void handlePlayerListResponse(const std::string& payload);
     void handlePlayerStatusUpdate(const std::string& payload);
     void handleChallengeReceived(const std::string& payload);
+    void handleQueueStatus(const std::string& payload);
     void handleMatchStart(const std::string& payload);
     void handleShipPlacementAck(const std::string& payload);
     void handleMatchReady(const std::string& payload);
@@ -140,6 +152,7 @@ private:
     void handleMatchEnd(const std::string& payload);
     void handleDrawOffer(const std::string& payload);
     void handleDrawResponse(const std::string& payload);
+    void handleReplayData(const std::string& payload);
 
     // Connection state
     int socket_fd_;
@@ -171,6 +184,11 @@ private:
     SendChallengeCallback send_challenge_callback_;
     ChallengeReceivedCallback challenge_received_callback_;
     MatchStartCallback match_start_callback_;
+    QueueCallback queue_callback_;
+    QueueStatusCallback queue_status_callback_;
+    
+    // Replay callbacks
+    ReplayListCallback replay_list_callback_;
 
     // Gameplay callbacks
     ShipPlacementCallback ship_placement_callback_;
@@ -190,7 +208,10 @@ private:
         VALIDATE_SESSION,
         PLAYER_LIST,
         SEND_CHALLENGE,
-        SHIP_PLACEMENT
+        SHIP_PLACEMENT,
+        QUEUE_JOIN,
+        QUEUE_LEAVE,
+        REPLAY_LIST
     };
     std::atomic<PendingRequest> pending_request_;
 

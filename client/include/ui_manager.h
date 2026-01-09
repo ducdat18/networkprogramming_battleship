@@ -83,6 +83,7 @@ enum UIScreen {
     SCREEN_SHIP_PLACEMENT,
     SCREEN_GAME,
     SCREEN_REPLAY,
+    SCREEN_REPLAY_VIEWER,
     SCREEN_PROFILE
 };
 
@@ -185,6 +186,7 @@ public:
     GtkWidget* createShipPlacementScreen();
     GtkWidget* createGameScreen();
     GtkWidget* createReplayScreen();
+    GtkWidget* createReplayViewerScreen(uint32_t match_id);
     GtkWidget* createProfileScreen();
 
     // Board rendering
@@ -221,6 +223,9 @@ public:
     void setPlayerBoard(Board* board) { player_board = board; }
     void setOpponentBoard(Board* board) { opponent_board = board; }
     void setCurrentMatch(MatchState* match) { current_match = match; }
+
+    // Getters
+    uint32_t getCurrentUserId() const { return current_player.user_id; }
 
     // Callback registration
     void setOnCellClicked(std::function<void(int, int)> callback) { on_cell_clicked = callback; }
