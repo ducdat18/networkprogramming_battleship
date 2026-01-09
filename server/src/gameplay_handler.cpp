@@ -16,6 +16,7 @@ GameplayHandler::~GameplayHandler() {
 bool GameplayHandler::canHandle(MessageType type) const {
     return (type == MessageType::SHIP_PLACEMENT ||
             type == MessageType::MOVE ||
+            type == MessageType::TURN_TIMEOUT ||
             type == MessageType::RESIGN ||
             type == MessageType::DRAW_OFFER ||
             type == MessageType::DRAW_RESPONSE ||
@@ -47,6 +48,16 @@ bool GameplayHandler::handleMessage(ClientConnection* client,
                 MoveMessage msg;
                 memcpy(&msg, payload.data(), sizeof(MoveMessage));
                 handleMove(header, msg, client_fd);
+                return true;
+            }
+            break;
+        }
+
+        case MessageType::TURN_TIMEOUT: {
+            if (payload.size() >= sizeof(TurnTimeoutMessage)) {
+                TurnTimeoutMessage msg;
+                memcpy(&msg, payload.data(), sizeof(TurnTimeoutMessage));
+                handleTurnTimeout(header, msg, client_fd);
                 return true;
             }
             break;
@@ -260,6 +271,7 @@ void GameplayHandler::handleShipPlacement(const MessageHeader& header,
             // Randomly select first player
             srand(time(nullptr));
             match->current_turn_player_id = (rand() % 2 == 0) ? player1_id : player2_id;
+            match->turn_start_time = time(nullptr);  // Record first turn start time
 
             // Send MATCH_READY to both players
             sendMatchReady(msg.match_id, player1_id, player2_id);
@@ -365,6 +377,50 @@ void GameplayHandler::handleMove(const MessageHeader& header,
         // Send turn update
         sendTurnUpdate(msg.match_id, match->current_turn_player_id, match->turn_number);
     }
+}
+
+void GameplayHandler::handleTurnTimeout(const MessageHeader& header,
+                                       const TurnTimeoutMessage& msg,
+                                       int client_fd) {
+    (void)client_fd;
+
+    // Validate session
+    std::string token(header.session_token);
+    uint32_t user_id = db_->validateSession(token);
+    if (user_id == 0) {
+        std::cout << "[TIMEOUT] Invalid session" << std::endl;
+        return;
+    }
+
+    // Get match state
+    auto match = getMatch(msg.match_id);
+    if (!match) {
+        std::cout << "[TIMEOUT] Match " << msg.match_id << " not found" << std::endl;
+        return;
+    }
+
+    // Validate it's this player's turn
+    if (match->current_turn_player_id != user_id) {
+        std::cout << "[TIMEOUT] Not player " << user_id << "'s turn" << std::endl;
+        return;
+    }
+
+    // Server-side validation: check elapsed time
+    uint64_t elapsed = time(nullptr) - match->turn_start_time;
+    if (elapsed < (uint64_t)match->turn_time_limit) {
+        std::cout << "[TIMEOUT] Too early: " << elapsed << "s elapsed, "
+                  << match->turn_time_limit << "s required" << std::endl;
+        return;
+    }
+
+    std::cout << "[TIMEOUT] Player " << user_id << " timed out in match "
+              << msg.match_id << " (" << elapsed << "s elapsed)" << std::endl;
+
+    // Switch turn
+    match->switchTurn();
+
+    // Broadcast turn update to both players
+    sendTurnUpdate(msg.match_id, match->current_turn_player_id, match->turn_number);
 }
 
 void GameplayHandler::handleResign(const MessageHeader& header,

@@ -1,0 +1,175 @@
+\subsection{Message Type Taxonomy}
+
+The protocol defines \textbf{66 message types} organized into 8 functional categories. Each message type is assigned a unique numeric identifier in the \texttt{MessageType} enum.
+
+\subsubsection{Message Type Enumeration}
+
+\begin{lstlisting}[style=cppstyle]
+enum class MessageType : uint8_t {
+    // Authentication (1-5)
+    AUTH_REGISTER = 1,
+    AUTH_LOGIN = 2,
+    AUTH_LOGOUT = 3,
+    AUTH_RESPONSE = 4,
+    VALIDATE_SESSION = 5,
+
+    // Player Management (10-12)
+    PLAYER_LIST_REQUEST = 10,
+    PLAYER_LIST = 11,
+    PLAYER_STATUS_UPDATE = 12,
+
+    // Matchmaking (20-24)
+    CHALLENGE_SEND = 20,
+    CHALLENGE_RECEIVED = 21,
+    CHALLENGE_RESPONSE = 22,
+    MATCH_START = 23,
+    MATCH_READY = 24,
+
+    // Gameplay (30-35)
+    SHIP_PLACEMENT = 30,
+    MOVE = 31,
+    MOVE_RESULT = 32,
+    TURN_UPDATE = 33,
+    MATCH_STATE = 34,
+    MATCH_END = 35,
+
+    // Match Actions (40-46)
+    PAUSE_REQUEST = 40,
+    PAUSE_RESPONSE = 41,
+    DRAW_OFFER = 42,
+    DRAW_RESPONSE = 43,
+    RESIGN = 44,
+    REMATCH_REQUEST = 45,
+    REMATCH_RESPONSE = 46,
+
+    // Replay & Stats (50-54)
+    REPLAY_REQUEST = 50,
+    REPLAY_DATA = 51,
+    STATS_REQUEST = 52,
+    STATS_DATA = 53,
+    ELO_UPDATE = 54,
+
+    // Chat (60)
+    CHAT_MESSAGE = 60,
+
+    // System (99-102)
+    ERROR = 99,
+    NOTIFICATION = 100,
+    PING = 101,
+    PONG = 102
+};
+\end{lstlisting}
+
+\subsubsection{Category Summary}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|c|p{6cm}|}
+\hline
+\textbf{Category} & \textbf{Range} & \textbf{Count} & \textbf{Purpose} \\ \hline
+Authentication & 1-5 & 5 & User registration, login, logout, session validation \\ \hline
+Player Management & 10-12 & 3 & Online player tracking and status updates \\ \hline
+Matchmaking & 20-24 & 5 & Challenge system and match creation \\ \hline
+Gameplay & 30-35 & 6 & Ship placement, moves, turn management, match end \\ \hline
+Match Actions & 40-46 & 7 & Pause, draw, resign, rematch requests \\ \hline
+Replay \& Stats & 50-54 & 5 & Game replay, player statistics, ELO updates \\ \hline
+Chat & 60 & 1 & In-game chat messages \\ \hline
+System & 99-102 & 4 & Error handling, notifications, keepalive \\ \hline
+\textbf{Total} & \textbf{1-102} & \textbf{66} & \\ \hline
+\end{tabular}
+\caption{Message Type Categories}
+\label{tab:message_categories}
+\end{table}
+
+
+\subsubsection{Category Details}
+
+\paragraph{Authentication (1-5)}
+Handles user account management and session authentication:
+\begin{itemize}
+    \item \texttt{AUTH\_REGISTER}: Create new user account
+    \item \texttt{AUTH\_LOGIN}: Authenticate with username/password
+    \item \texttt{AUTH\_LOGOUT}: End current session
+    \item \texttt{AUTH\_RESPONSE}: Generic authentication response
+    \item \texttt{VALIDATE\_SESSION}: Check if session token is valid
+\end{itemize}
+
+\paragraph{Player Management (10-12)}
+Manages online player tracking and lobby functionality:
+\begin{itemize}
+    \item \texttt{PLAYER\_LIST\_REQUEST}: Request current online players
+    \item \texttt{PLAYER\_LIST}: Response with player list
+    \item \texttt{PLAYER\_STATUS\_UPDATE}: Broadcast player status change
+\end{itemize}
+
+\paragraph{Matchmaking (20-24)}
+Handles match creation through challenge system:
+\begin{itemize}
+    \item \texttt{CHALLENGE\_SEND}: Send challenge to another player
+    \item \texttt{CHALLENGE\_RECEIVED}: Notify player of incoming challenge
+    \item \texttt{CHALLENGE\_RESPONSE}: Accept or decline challenge
+    \item \texttt{MATCH\_START}: Notify both players match is starting
+    \item \texttt{MATCH\_READY}: Both players have placed ships
+\end{itemize}
+
+\paragraph{Gameplay (30-35)}
+Core game mechanics and state management:
+\begin{itemize}
+    \item \texttt{SHIP\_PLACEMENT}: Submit ship positions
+    \item \texttt{MOVE}: Submit attack coordinate
+    \item \texttt{MOVE\_RESULT}: Result of attack (miss/hit/sunk)
+    \item \texttt{TURN\_UPDATE}: Turn change notification
+    \item \texttt{MATCH\_STATE}: Current game state sync
+    \item \texttt{MATCH\_END}: Game over with winner/stats
+\end{itemize}
+
+\paragraph{Match Actions (40-46)}
+Additional match control features:
+\begin{itemize}
+    \item \texttt{PAUSE\_REQUEST/RESPONSE}: Pause game
+    \item \texttt{DRAW\_OFFER/RESPONSE}: Offer/accept draw
+    \item \texttt{RESIGN}: Player surrenders
+    \item \texttt{REMATCH\_REQUEST/RESPONSE}: Play again
+\end{itemize}
+
+\paragraph{Replay \& Stats (50-54)}
+Post-game features and player progression:
+\begin{itemize}
+    \item \texttt{REPLAY\_REQUEST/DATA}: Request/receive game replay
+    \item \texttt{STATS\_REQUEST/DATA}: Request/receive player stats
+    \item \texttt{ELO\_UPDATE}: Rating change notification
+\end{itemize}
+
+\paragraph{Chat (60)}
+In-game communication:
+\begin{itemize}
+    \item \texttt{CHAT\_MESSAGE}: Send chat message during match
+\end{itemize}
+
+\paragraph{System (99-102)}
+Protocol-level and error handling:
+\begin{itemize}
+    \item \texttt{ERROR}: Error message with error code
+    \item \texttt{NOTIFICATION}: System notification
+    \item \texttt{PING/PONG}: Keepalive heartbeat
+\end{itemize}
+
+\subsubsection{Message Direction}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Category} & \textbf{C→S} & \textbf{S→C} & \textbf{Bidirectional} \\ \hline
+Authentication & ✓ & ✓ & \\ \hline
+Player Management & ✓ & ✓ & \\ \hline
+Matchmaking & ✓ & ✓ & \\ \hline
+Gameplay & ✓ & ✓ & \\ \hline
+Match Actions & & & ✓ \\ \hline
+Replay \& Stats & ✓ & ✓ & \\ \hline
+Chat & & & ✓ \\ \hline
+System & & ✓ & \\ \hline
+\end{tabular}
+\caption{Message Direction (C→S: Client to Server, S→C: Server to Client)}
+\label{tab:message_direction}
+\end{table}

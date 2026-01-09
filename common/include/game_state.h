@@ -82,6 +82,7 @@ public:
     uint32_t current_turn_player_id;
     int turn_number;
     int turn_time_limit;  // seconds
+    uint64_t turn_start_time;  // Timestamp when current turn started
 
     std::vector<Move> move_history;
 

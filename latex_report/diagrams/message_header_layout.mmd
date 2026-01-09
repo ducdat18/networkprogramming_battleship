@@ -1,0 +1,34 @@
+%%{init: {'theme':'base'}}%%
+graph TD
+    subgraph Memory["Memory Layout (77 bytes, packed)"]
+        direction LR
+
+        subgraph B0["Offset 0x00"]
+            T["type<br/>0x1F<br/>(1 byte)"]
+        end
+
+        subgraph B1["Offset 0x01-0x04"]
+            L["length<br/>0x00000006<br/>(4 bytes)"]
+        end
+
+        subgraph B5["Offset 0x05-0x0C"]
+            TS["timestamp<br/>0x000000006B8A9C65<br/>(8 bytes)"]
+        end
+
+        subgraph B13["Offset 0x0D-0x4C"]
+            ST["session_token<br/>'token_42_a7f3e9d2...'<br/>(64 bytes)"]
+        end
+    end
+
+    subgraph Example["Example: MOVE Message"]
+        EX["Type: 0x1F (31 = MOVE)<br/>Length: 0x06 (6 bytes payload)<br/>Timestamp: 1703812715<br/>Token: 'token_42_...'"]
+    end
+
+    Memory -.->|"interpreted as"| Example
+
+    style Memory fill:#f5f5f5,stroke:#666,stroke-width:2px
+    style B0 fill:#ffcccc
+    style B1 fill:#fff59d
+    style B5 fill:#b3e5fc
+    style B13 fill:#f8bbd0
+    style Example fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px

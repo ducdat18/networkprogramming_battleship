@@ -93,6 +93,7 @@ public:
     // Gameplay API
     void sendShipPlacement(uint32_t match_id, const Ship ships[5], ShipPlacementCallback callback);
     void sendMove(uint32_t match_id, int row, int col);
+    void sendTurnTimeout(uint32_t match_id);
     void sendResign(uint32_t match_id);
     void sendDrawOffer(uint32_t match_id);
     void sendDrawResponse(uint32_t match_id, bool accept);

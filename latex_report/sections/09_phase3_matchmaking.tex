@@ -1,0 +1,467 @@
+\subsection{Phase 3: Matchmaking System}
+
+The matchmaking system enables players to find opponents and create matches through a challenge-based system.
+
+\subsubsection{Player List \& Lobby}
+
+\paragraph{Lobby UI}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.95\textwidth]{images/lobby_player_list.png}
+\caption{Lobby Screen with Online Player List}
+\label{fig:lobby}
+\end{figure}
+
+The lobby displays all currently online players with the following information:
+\begin{itemize}
+    \item Username (unique identifier)
+    \item Display Name (friendly name)
+    \item ELO Rating (skill level, default 1000)
+    \item Status (color-coded indicator)
+\end{itemize}
+
+\paragraph{Player Status Indicators}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Status} & \textbf{Color} & \textbf{Meaning} \\ \hline
+\textcolor{darkgreen}{ONLINE} & Green & Available for challenges \\ \hline
+\textcolor{darkorange}{IN\_GAME} & Orange & Currently playing a match \\ \hline
+\textcolor{darkred}{BUSY} & Red & Not accepting challenges \\ \hline
+\textcolor{darkgray}{OFFLINE} & Gray & Disconnected \\ \hline
+\end{tabular}
+\caption{Player Status Color Codes}
+\label{tab:player_status}
+\end{table}
+
+\paragraph{Player Manager Implementation}
+
+Located in \texttt{server/src/player\_manager.cpp}:
+
+\begin{lstlisting}[style=cppstyle]
+class PlayerManager {
+private:
+    struct PlayerInfo {
+        uint32_t user_id;
+        std::string username;
+        std::string display_name;
+        int32_t elo_rating;
+        PlayerStatus status;
+        int socket_fd;
+    };
+
+    std::map<uint32_t, PlayerInfo> online_players_;
+    std::mutex mutex_;
+
+public:
+    void addPlayer(uint32_t user_id,
+                   const std::string& username,
+                   const std::string& display_name,
+                   int elo_rating,
+                   int socket_fd) {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        online_players_[user_id] = {
+            user_id, username, display_name,
+            elo_rating, PlayerStatus::ONLINE, socket_fd
+        };
+
+        // Broadcast player list update to all clients
+        broadcastPlayerListUpdate();
+    }
+
+    void removePlayer(uint32_t user_id) {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        auto it = online_players_.find(user_id);
+        if (it != online_players_.end()) {
+            online_players_.erase(it);
+            broadcastPlayerListUpdate();
+        }
+    }
+
+    void updateStatus(uint32_t user_id, PlayerStatus status) {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        auto it = online_players_.find(user_id);
+        if (it != online_players_.end()) {
+            it->second.status = status;
+
+            // Broadcast status change
+            broadcastStatusUpdate(user_id, status);
+        }
+    }
+
+    std::vector<PlayerInfo_Message> getPlayerList() {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        std::vector<PlayerInfo_Message> list;
+        for (const auto& [id, info] : online_players_) {
+            PlayerInfo_Message msg;
+            msg.user_id = info.user_id;
+            strncpy(msg.username, info.username.c_str(), 31);
+            strncpy(msg.display_name, info.display_name.c_str(),
+                    63);
+            msg.elo_rating = info.elo_rating;
+            msg.status = info.status;
+            list.push_back(msg);
+        }
+
+        return list;
+    }
+
+private:
+    void broadcastPlayerListUpdate() {
+        // Send updated player list to all connected clients
+        PlayerListResponse resp;
+        auto list = getPlayerList();
+        resp.count = std::min(list.size(), (size_t)100);
+        memcpy(resp.players, list.data(),
+               resp.count * sizeof(PlayerInfo_Message));
+
+        std::string payload = serialize(resp);
+        MessageHeader header = createHeader(
+            MessageType::PLAYER_LIST, payload.size()
+        );
+
+        for (const auto& [id, info] : online_players_) {
+            send(info.socket_fd, &header, sizeof(header), 0);
+            send(info.socket_fd, payload.data(),
+                 payload.size(), 0);
+        }
+    }
+};
+\end{lstlisting}
+
+\paragraph{Real-time Updates}
+
+The server broadcasts \texttt{PLAYER\_STATUS\_UPDATE} messages when:
+\begin{enumerate}
+    \item Player logs in → Status: ONLINE
+    \item Player accepts match → Status: IN\_GAME
+    \item Player finishes match → Status: ONLINE
+    \item Player logs out → Removed from list
+\end{enumerate}
+
+Clients automatically update the UI when receiving status updates, providing a real-time lobby experience.
+
+\subsubsection{Challenge System}
+
+% Challenge flow diagram belongs to Person 1 (Matchmaking Flow)
+% This section focuses on implementation code and UI screenshots only
+
+\paragraph{Sending a Challenge}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.6\textwidth]{images/challenge_send_dialog.png}
+\caption{Challenge Send Dialog with Game Settings}
+\label{fig:challenge_send}
+\end{figure}
+
+Players can configure the following game settings when sending a challenge:
+\begin{itemize}
+    \item \textbf{Time Limit}: Seconds per turn (0 = unlimited, 30-300 seconds)
+    \item \textbf{Random Placement}: Auto-place ships (faster game start)
+\end{itemize}
+
+\paragraph{Receiving a Challenge}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.6\textwidth]{images/challenge_received_popup.png}
+\caption{Challenge Received Notification Popup}
+\label{fig:challenge_received}
+\end{figure}
+
+The notification displays:
+\begin{itemize}
+    \item Challenger's display name
+    \item Challenger's ELO rating (to assess skill level)
+    \item Game settings (time limit, random placement)
+    \item Accept and Decline buttons
+    \item Countdown timer (60 seconds to respond)
+\end{itemize}
+
+\paragraph{Challenge Manager Implementation}
+
+Located in \texttt{server/src/challenge\_manager.cpp}:
+
+\begin{lstlisting}[style=cppstyle]
+class ChallengeManager {
+private:
+    struct Challenge {
+        uint32_t challenge_id;
+        uint32_t challenger_id;
+        uint32_t target_id;
+        uint32_t time_limit;
+        bool random_placement;
+        uint64_t expires_at;
+    };
+
+    std::map<uint32_t, Challenge> pending_challenges_;
+    std::mutex mutex_;
+    uint32_t next_challenge_id_ = 1;
+
+public:
+    uint32_t createChallenge(uint32_t challenger_id,
+                             uint32_t target_id,
+                             uint32_t time_limit,
+                             bool random_placement) {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        // Validate: cannot challenge self
+        if (challenger_id == target_id) {
+            return 0;
+        }
+
+        // Validate: target must be online and available
+        if (!player_manager_.isAvailable(target_id)) {
+            return 0;
+        }
+
+        // Create challenge
+        uint32_t id = next_challenge_id_++;
+        Challenge challenge = {
+            id, challenger_id, target_id,
+            time_limit, random_placement,
+            std::time(nullptr) + 60  // Expires in 60 sec
+        };
+
+        pending_challenges_[id] = challenge;
+
+        // Notify target player
+        sendChallengeNotification(challenge);
+
+        return id;
+    }
+
+    bool respondToChallenge(uint32_t challenge_id,
+                            bool accepted) {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        auto it = pending_challenges_.find(challenge_id);
+        if (it == pending_challenges_.end()) {
+            return false;  // Challenge not found or expired
+        }
+
+        Challenge challenge = it->second;
+        pending_challenges_.erase(it);
+
+        if (accepted) {
+            // Create match
+            uint32_t match_id = match_manager_.createMatch(
+                challenge.challenger_id,
+                challenge.target_id,
+                challenge.time_limit,
+                challenge.random_placement
+            );
+
+            // Update player status to IN_GAME
+            player_manager_.updateStatus(
+                challenge.challenger_id,
+                PlayerStatus::IN_GAME
+            );
+            player_manager_.updateStatus(
+                challenge.target_id,
+                PlayerStatus::IN_GAME
+            );
+
+            // Notify both players of match start
+            sendMatchStart(match_id, challenge.challenger_id,
+                          challenge.target_id, challenge.time_limit);
+        } else {
+            // Notify challenger of decline
+            sendChallengeDeclined(challenge.challenger_id,
+                                 challenge.target_id);
+        }
+
+        return true;
+    }
+
+    void checkTimeouts() {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        auto now = std::time(nullptr);
+        auto it = pending_challenges_.begin();
+
+        while (it != pending_challenges_.end()) {
+            if (now > it->second.expires_at) {
+                // Challenge timed out
+                sendChallengeTimeout(it->second.challenger_id);
+                it = pending_challenges_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+private:
+    void sendChallengeNotification(const Challenge& challenge) {
+        // Get challenger info
+        auto challenger_info =
+            player_manager_.getPlayerInfo(challenge.challenger_id);
+
+        // Build notification message
+        ChallengeReceived msg;
+        msg.challenge_id = challenge.challenge_id;
+        msg.challenger_id = challenge.challenger_id;
+        strncpy(msg.challenger_name,
+                challenger_info.display_name.c_str(), 63);
+        msg.challenger_elo = challenger_info.elo_rating;
+        msg.time_limit = challenge.time_limit;
+        msg.random_placement = challenge.random_placement;
+        msg.expires_at = challenge.expires_at;
+
+        // Send to target player
+        std::string payload = serialize(msg);
+        MessageHeader header = createHeader(
+            MessageType::CHALLENGE_RECEIVED,
+            payload.size()
+        );
+
+        int target_fd =
+            player_manager_.getSocketFd(challenge.target_id);
+        send(target_fd, &header, sizeof(header), 0);
+        send(target_fd, payload.data(), payload.size(), 0);
+    }
+};
+\end{lstlisting}
+
+\paragraph{Challenge Timeout}
+
+Challenges automatically expire after 60 seconds if not responded to. A background thread periodically calls \texttt{checkTimeouts()} to clean up expired challenges:
+
+\begin{lstlisting}[style=cppstyle]
+// Server main loop
+while (running_) {
+    // Accept connections...
+
+    // Check challenge timeouts every 5 seconds
+    static auto last_check = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<
+        std::chrono::seconds>(now - last_check).count();
+
+    if (elapsed >= 5) {
+        challenge_manager_.checkTimeouts();
+        last_check = now;
+    }
+}
+\end{lstlisting}
+
+\subsubsection{Match Creation}
+
+When a challenge is accepted, the server creates a match record in the database and notifies both players.
+
+\paragraph{Match Creation Process}
+
+\begin{lstlisting}[style=cppstyle]
+uint32_t MatchManager::createMatch(uint32_t player1_id,
+                                   uint32_t player2_id,
+                                   uint32_t time_limit,
+                                   bool random_placement) {
+    // Insert match record into database
+    const char* sql =
+        "INSERT INTO matches "
+        "(player1_id, player2_id, status, created_at) "
+        "VALUES (?, ?, 'in_progress', CURRENT_TIMESTAMP)";
+
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
+    sqlite3_bind_int(stmt, 1, player1_id);
+    sqlite3_bind_int(stmt, 2, player2_id);
+
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        sqlite3_finalize(stmt);
+        return 0;
+    }
+
+    uint32_t match_id = sqlite3_last_insert_rowid(db_);
+    sqlite3_finalize(stmt);
+
+    // Create match state object
+    auto match_state = std::make_unique<MatchState>(
+        match_id, player1_id, player2_id, time_limit
+    );
+
+    // Randomly select first player
+    bool player1_first = (rand() % 2) == 0;
+    match_state->setCurrentTurn(
+        player1_first ? player1_id : player2_id
+    );
+
+    // Store match state
+    {
+        std::lock_guard<std::mutex> lock(matches_mutex_);
+        active_matches_[match_id] = std::move(match_state);
+    }
+
+    return match_id;
+}
+\end{lstlisting}
+
+\paragraph{Match Start Notification}
+
+\begin{lstlisting}[style=cppstyle]
+void sendMatchStart(uint32_t match_id,
+                    uint32_t player1_id,
+                    uint32_t player2_id,
+                    uint32_t time_limit) {
+    // Get player info
+    auto p1_info = player_manager_.getPlayerInfo(player1_id);
+    auto p2_info = player_manager_.getPlayerInfo(player2_id);
+
+    // Send to player 1
+    MatchStartMessage msg1;
+    msg1.match_id = match_id;
+    msg1.opponent_id = player2_id;
+    strncpy(msg1.opponent_name, p2_info.display_name.c_str(),
+            63);
+    msg1.opponent_elo = p2_info.elo_rating;
+    msg1.time_limit = time_limit;
+    msg1.you_go_first = /* random selection */;
+
+    sendToPlayer(player1_id, MessageType::MATCH_START, msg1);
+
+    // Send to player 2 (with inverted info)
+    MatchStartMessage msg2;
+    msg2.match_id = match_id;
+    msg2.opponent_id = player1_id;
+    strncpy(msg2.opponent_name, p1_info.display_name.c_str(),
+            63);
+    msg2.opponent_elo = p1_info.elo_rating;
+    msg2.time_limit = time_limit;
+    msg2.you_go_first = !msg1.you_go_first;
+
+    sendToPlayer(player2_id, MessageType::MATCH_START, msg2);
+}
+\end{lstlisting}
+
+\paragraph{Database Schema}
+
+\begin{lstlisting}[style=sqlstyle]
+CREATE TABLE matches (
+    match_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player1_id INTEGER NOT NULL,
+    player2_id INTEGER NOT NULL,
+    winner_id INTEGER,
+    status TEXT CHECK(status IN
+        ('waiting', 'in_progress', 'completed', 'draw'))
+        DEFAULT 'in_progress',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ended_at DATETIME,
+    FOREIGN KEY (player1_id) REFERENCES users(user_id),
+    FOREIGN KEY (player2_id) REFERENCES users(user_id),
+    FOREIGN KEY (winner_id) REFERENCES users(user_id)
+);
+
+CREATE INDEX idx_match_players
+    ON matches(player1_id, player2_id);
+CREATE INDEX idx_match_status ON matches(status);
+\end{lstlisting}
+
+After match creation, both players receive \texttt{MATCH\_START} messages and transition to the ship placement screen.

@@ -1,0 +1,34 @@
+%%{init: {'theme':'base'}}%%
+graph TB
+    subgraph Payload["LoginRequest Payload (96 bytes)"]
+        direction TB
+
+        Struct["<b>C++ Struct:</b><br/>struct LoginRequest {<br/>  char username[32];<br/>  char password[64];<br/>}"]
+
+        Data["<b>Example Data:</b><br/>username: 'alice'<br/>password: '5f4dcc3b5aa765d61d8327deb882cf99...'"]
+
+        Struct --> Data
+    end
+
+    subgraph Complete["Complete Network Transmission (173 bytes)"]
+        direction TB
+
+        Header["<b>MessageHeader (77 bytes):</b><br/>0x00: 02 (AUTH_LOGIN)<br/>0x01-0x04: 60 00 00 00 (length=96)<br/>0x05-0x0C: timestamp<br/>0x0D-0x4C: session_token (empty for auth)"]
+
+        PayloadHex["<b>LoginRequest Payload (96 bytes):</b><br/>0x4D-0x6C: 61 6c 69 63 65 00... ('alice' + padding)<br/>0x6D-0xAC: 35 66 34 64 63 63... (SHA-256 hash)"]
+
+        Header --> PayloadHex
+    end
+
+    subgraph Wire["On Network"]
+        W["<b>Total: 173 bytes</b><br/>77 bytes header + 96 bytes payload<br/><br/>Both header and payload serialized to binary"]
+    end
+
+    Payload -->|"serialized to<br/>(with header)"| Complete
+    Complete -->|"transmitted via TCP"| Wire
+
+    style Payload fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style Complete fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    style Wire fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+    style Header fill:#f8bbd0
+    style PayloadHex fill:#fff59d

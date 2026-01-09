@@ -49,6 +49,7 @@ public:
     // Specific handlers
     void handleShipPlacement(const MessageHeader& header, const ShipPlacementMessage& msg, int client_fd);
     void handleMove(const MessageHeader& header, const MoveMessage& msg, int client_fd);
+    void handleTurnTimeout(const MessageHeader& header, const TurnTimeoutMessage& msg, int client_fd);
     void handleResign(const MessageHeader& header, const ResignMessage& msg, int client_fd);
     void handleDrawOffer(const MessageHeader& header, const DrawOfferMessage& msg, int client_fd);
     void handleDrawResponse(const MessageHeader& header, const DrawResponseMessage& msg, int client_fd);

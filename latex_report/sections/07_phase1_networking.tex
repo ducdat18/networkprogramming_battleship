@@ -1,0 +1,92 @@
+\subsection{Phase 1: Networking}
+
+The networking layer provides the foundation for client-server communication using TCP sockets with a multi-threaded architecture.
+
+\subsubsection{Server Architecture}
+
+The server uses a \textbf{multi-threaded} design to handle multiple simultaneous client connections.
+
+\paragraph{Server Components}
+
+\begin{itemize}
+    \item \textbf{Main Thread}: Accepts incoming client connections on port 8888
+    \item \textbf{Client Handler Threads}: One dedicated thread per connected client for message processing
+    \item \textbf{Thread-Safe Data Structures}: Mutex-protected client registry and player manager
+\end{itemize}
+
+% Server architecture diagram belongs to Person 1 (System Architecture)
+% This section focuses on implementation code only
+
+\paragraph{Server Implementation}
+
+\textbf{Socket Setup:}
+\begin{enumerate}
+    \item Create TCP socket: \texttt{socket(AF\_INET, SOCK\_STREAM, 0)}
+    \item Bind to port 8888: \texttt{bind()} + \texttt{INADDR\_ANY}
+    \item Listen with backlog 10: \texttt{listen(server\_fd, 10)}
+    \item Set \texttt{SO\_REUSEADDR} for quick restart
+\end{enumerate}
+
+\textbf{Accept Loop:}
+\begin{enumerate}
+    \item \texttt{accept()} blocks waiting for client
+    \item Create \texttt{ClientConnection} object
+    \item Add to registry (mutex-protected map)
+    \item Spawn handler thread for this client
+\end{enumerate}
+
+Each client gets dedicated thread for message processing, ensuring non-blocking server.
+
+\subsubsection{Client Networking}
+
+The client implements \textbf{asynchronous message receiving} with a dedicated background thread.
+
+\paragraph{Client Architecture}
+
+% Client architecture diagram belongs to Person 1 (System Architecture)
+% This section focuses on implementation code only
+
+\paragraph{Connection States}
+
+\begin{lstlisting}[style=cppstyle]
+enum class ConnectionStatus {
+    DISCONNECTED,    // Not connected to server
+    CONNECTING,      // Connection in progress
+    CONNECTED,       // Connected but not authenticated
+    AUTHENTICATED    // Fully authenticated
+};
+\end{lstlisting}
+
+\paragraph{Client Implementation}
+
+\textbf{Connection Setup:}
+\begin{enumerate}
+    \item Create socket and set 5-second timeout
+    \item \texttt{connect()} to server (127.0.0.1:8888)
+    \item Spawn background thread for async receiving
+    \item Update status: CONNECTING → CONNECTED
+\end{enumerate}
+
+\textbf{Async Receive Loop (Background Thread):}
+\begin{enumerate}
+    \item Continuously \texttt{recv()} header (77 bytes, blocking)
+    \item Validate header size
+    \item \texttt{recv()} payload based on \texttt{header.length}
+    \item Queue message for main thread processing
+\end{enumerate}
+
+\textbf{Thread-Safe Sending:}
+\begin{itemize}
+    \item \texttt{send\_mutex\_} protects socket writes
+    \item Send header + payload atomically
+    \item Main thread sends, background thread receives
+\end{itemize}
+
+\subsubsection{Key Features}
+
+\begin{itemize}
+    \item \textbf{Thread Safety}: Mutexes protect shared resources (client registry, player manager)
+    \item \textbf{Error Handling}: Connection timeouts (5 min), graceful disconnect cleanup
+    \item \textbf{Performance}: \texttt{MSG\_WAITALL} for atomic reads, 5-second socket timeouts
+    \item \textbf{Reliability}: Dedicated thread per client, non-blocking server operation
+\end{itemize}

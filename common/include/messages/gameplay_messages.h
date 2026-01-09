@@ -86,6 +86,12 @@ struct TurnUpdateMessage {
     }
 } __attribute__((packed));
 
+struct TurnTimeoutMessage {
+    uint32_t match_id;
+
+    TurnTimeoutMessage() : match_id(0) {}
+} __attribute__((packed));
+
 // ============== MATCH STATE ==============
 
 struct MatchStateMessage {

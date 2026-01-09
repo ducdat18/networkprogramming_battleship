@@ -1,0 +1,82 @@
+\subsection{Protocol Overview}
+
+The Battleship multiplayer game uses a custom binary protocol built on top of TCP sockets for reliable client-server communication. The protocol is designed for efficiency, security, and ease of implementation.
+
+\subsubsection{Protocol Characteristics}
+
+\begin{itemize}
+    \item \textbf{Transport Layer}: TCP (Transmission Control Protocol)
+    \item \textbf{Socket API}: POSIX sockets (BSD-style)
+    \item \textbf{Protocol Version}: 1.0
+    \item \textbf{Default Port}: 8888
+    \item \textbf{Message Format}: Binary (packed C structs)
+    \item \textbf{Encoding}: Little-endian (x86/x64 compatible)
+\end{itemize}
+
+\subsubsection{Protocol Constants}
+
+The protocol defines several important constants used throughout the implementation:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Constant} & \textbf{Value} & \textbf{Description} \\ \hline
+PROTOCOL\_VERSION & "1.0" & Current protocol version \\ \hline
+DEFAULT\_PORT & 8888 & Server listening port \\ \hline
+MAX\_MESSAGE\_SIZE & 4096 bytes & Maximum single message size \\ \hline
+BUFFER\_SIZE & 8192 bytes & Network buffer size \\ \hline
+SESSION\_EXPIRY & 24 hours & Session timeout duration \\ \hline
+CHALLENGE\_TIMEOUT & 60 seconds & Challenge expiration time \\ \hline
+\end{tabular}
+\caption{Protocol Constants}
+\label{tab:protocol_constants}
+\end{table}
+
+\subsubsection{Message Structure}
+
+Each network message follows a consistent structure:
+
+\begin{equation}
+\text{Message} = \text{MessageHeader (77 bytes)} + \text{Payload (variable)}
+\end{equation}
+
+The fixed-size header allows for efficient message parsing and routing, while the variable-length payload supports different message types with varying data requirements.
+
+\subsubsection{Wire Format}
+
+Each message consists of a fixed-size header followed by a variable-length payload:
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{images/wire_format.png}
+\caption{Message Wire Format - Header and Payload Structure}
+\label{fig:wire_format}
+\end{figure}
+
+\subsubsection{Design Rationale}
+
+\textbf{Why Binary Protocol?}
+\begin{itemize}
+    \item \textbf{Efficiency}: Binary encoding is more compact than text-based protocols (JSON/XML)
+    \item \textbf{Performance}: No serialization/deserialization overhead
+    \item \textbf{Type Safety}: Fixed-size structs prevent parsing errors
+    \item \textbf{Simplicity}: Direct memory mapping with \texttt{memcpy}
+\end{itemize}
+
+\textbf{Why TCP over UDP?}
+\begin{itemize}
+    \item \textbf{Reliability}: Guaranteed delivery and ordering (critical for game state)
+    \item \textbf{Error Handling}: Built-in checksums and retransmission
+    \item \textbf{Simplicity}: No need to implement custom acknowledgment logic
+    \item \textbf{Firewall-Friendly}: Better NAT traversal than UDP
+\end{itemize}
+
+\subsubsection{Security Considerations}
+
+\begin{itemize}
+    \item \textbf{Session Tokens}: 64-byte tokens for authentication (included in every message header)
+    \item \textbf{Password Hashing}: SHA-256 with salt (passwords never transmitted in plaintext)
+    \item \textbf{Size Validation}: Payload size checked before deserialization (prevents buffer overflows)
+    \item \textbf{Timeout Protection}: Session and challenge timeouts prevent stale connections
+\end{itemize}

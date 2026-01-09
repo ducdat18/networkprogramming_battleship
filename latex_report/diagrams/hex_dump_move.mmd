@@ -1,0 +1,34 @@
+%%{init: {'theme':'base'}}%%
+graph TB
+    subgraph PayloadStruct["MoveMessage Payload (6 bytes)"]
+        direction TB
+
+        Struct["<b>C++ Struct:</b><br/>struct MoveMessage {<br/>  uint32_t match_id;<br/>  Coordinate target; // int8_t row, col<br/>}"]
+
+        Data["<b>Example Data:</b><br/>match_id: 123<br/>target.row: 5<br/>target.col: 7"]
+
+        Struct --> Data
+    end
+
+    subgraph Complete["Complete Network Transmission (83 bytes)"]
+        direction TB
+
+        Header["<b>MessageHeader (77 bytes):</b><br/>0x00: 1F (MOVE=31)<br/>0x01-0x04: 06 00 00 00 (length=6)<br/>0x05-0x0C: 6B 8A 9C 65... (timestamp)<br/>0x0D-0x4C: token_42_a7f3e9d2... (session_token)"]
+
+        Payload["<b>MoveMessage Payload (6 bytes):</b><br/>0x4D-0x50: 7B 00 00 00 (match_id=123)<br/>0x51: 05 (row=5)<br/>0x52: 07 (col=7)"]
+
+        Header --> Payload
+    end
+
+    subgraph Wire["On Network"]
+        W["<b>Total: 83 bytes</b><br/>77 bytes header + 6 bytes payload<br/><br/>Very compact binary format!"]
+    end
+
+    PayloadStruct -->|"serialized with header"| Complete
+    Complete -->|"transmitted via TCP"| Wire
+
+    style PayloadStruct fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style Complete fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    style Wire fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+    style Header fill:#f8bbd0
+    style Payload fill:#c5e1a5

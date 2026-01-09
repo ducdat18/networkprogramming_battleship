@@ -790,6 +790,29 @@ void ClientNetwork::sendMove(uint32_t match_id, int row, int col) {
     sendMessage(header, std::string(reinterpret_cast<const char*>(&msg), sizeof(msg)));
 }
 
+void ClientNetwork::sendTurnTimeout(uint32_t match_id) {
+    if (!isAuthenticated()) {
+        std::cerr << "[CLIENT] Cannot send timeout - not authenticated" << std::endl;
+        return;
+    }
+
+    TurnTimeoutMessage msg;
+    msg.match_id = match_id;
+
+    MessageHeader header;
+    memset(&header, 0, sizeof(header));
+    header.type = static_cast<uint8_t>(MessageType::TURN_TIMEOUT);
+    header.length = sizeof(msg);
+    header.timestamp = time(nullptr);
+    safeStrCopy(header.session_token, session_token_, sizeof(header.session_token));
+
+    if (sendMessage(header, std::string(reinterpret_cast<const char*>(&msg), sizeof(msg)))) {
+        std::cout << "[CLIENT] Sent turn timeout for match " << match_id << std::endl;
+    } else {
+        std::cerr << "[CLIENT] Failed to send turn timeout" << std::endl;
+    }
+}
+
 void ClientNetwork::sendResign(uint32_t match_id) {
     if (!isAuthenticated()) {
         std::cerr << "[CLIENT] Not authenticated" << std::endl;

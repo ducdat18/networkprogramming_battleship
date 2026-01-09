@@ -1,0 +1,165 @@
+\documentclass[12pt,a4paper]{article}
+
+% ============================================
+% PACKAGES
+% ============================================
+\usepackage[utf8]{inputenc}
+\usepackage[vietnamese,english]{babel}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+
+% Graphics and colors
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{float}
+
+% Tables
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{multirow}
+
+% Code listings
+\usepackage{listings}
+\usepackage{caption}
+
+% Links and references
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    citecolor=blue,
+    pdftitle={Battleship Multiplayer - Technical Report},
+    pdfauthor={Network Programming Team},
+}
+
+% Math (if needed)
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% Headers and footers
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Battleship Multiplayer}
+\lhead{Section \thesection}
+\rfoot{Page \thepage}
+
+% ============================================
+% CODE LISTING CONFIGURATION
+% ============================================
+\lstdefinestyle{cppstyle}{
+    language=C++,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{green!60!black}\itshape,
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=8pt,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    frameround=tttt,
+    rulecolor=\color{gray!50},
+    breaklines=true,
+    breakatwhitespace=false,
+    tabsize=4,
+    showstringspaces=false,
+    captionpos=b,
+    xleftmargin=2em,
+    framexleftmargin=1.5em
+}
+
+\lstdefinestyle{sqlstyle}{
+    language=SQL,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{green!60!black}\itshape,
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=8pt,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    frameround=tttt,
+    rulecolor=\color{gray!50},
+    breaklines=true,
+    breakatwhitespace=false,
+    tabsize=4,
+    showstringspaces=false,
+    captionpos=b,
+    xleftmargin=2em,
+    framexleftmargin=1.5em
+}
+
+\lstset{style=cppstyle}
+
+% ============================================
+% CUSTOM COLORS
+% ============================================
+\definecolor{darkgreen}{RGB}{0,128,0}
+\definecolor{darkorange}{RGB}{255,140,0}
+\definecolor{darkred}{RGB}{139,0,0}
+\definecolor{darkgray}{RGB}{128,128,128}
+
+% ============================================
+% TITLE PAGE INFO
+% ============================================
+\title{
+    \textbf{BATTLESHIP MULTIPLAYER GAME}\\
+    \large Network Programming Project\\
+    \large Technical Report - Part 2: Implementation \& Features
+}
+\author{
+    Student Name\\
+    Student ID\\
+    Network Programming Course
+}
+\date{\today}
+
+% ============================================
+% DOCUMENT BEGIN
+% ============================================
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+\newpage
+
+\tableofcontents
+\newpage
+
+% ============================================
+% SECTION 3: PACKET STRUCTURE
+% ============================================
+\section{Network Protocol \& Packet Structure}
+
+\input{sections/01_protocol_overview}
+\input{sections/02_message_header}
+\input{sections/03_message_taxonomy}
+\input{sections/04_auth_packets}
+\input{sections/05_matchmaking_gameplay_packets}
+\input{sections/06_serialization}
+
+% ============================================
+% SECTION 4: APPLICATION FEATURES
+% ============================================
+\section{Application Features \& Implementation}
+
+\input{sections/07_phase1_networking}
+\input{sections/08_phase2_authentication}
+\input{sections/09_phase3_matchmaking}
+\input{sections/10_testing}
+
+% ============================================
+% CONCLUSION (if needed)
+% ============================================
+% \section{Conclusion}
+% \input{sections/11_conclusion}
+
+\end{document}

@@ -230,9 +230,14 @@ public:
 
     // Game actions
     void resignMatch();
+    bool handleApplicationExit();  // Returns true if exit cancelled, false if proceeding
 
     // Helper for draggable header
     static void makeDraggable(GtkWidget* widget, GtkWidget* window);
+
+    // Window event handlers
+    static gboolean onWindowDeleteEvent(GtkWidget* widget, GdkEvent* event, gpointer data);
+    static void onWindowDestroy(GtkWidget* widget, gpointer data);
 
     // Ship placement helpers
     void selectShipForPlacement(ShipType type);

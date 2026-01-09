@@ -1,0 +1,195 @@
+\subsection{Authentication Packets}
+
+Authentication packets handle user registration, login, logout, and session management. All authentication message structs are defined in \texttt{common/include/messages/authentication\_messages.h}.
+
+\subsubsection{Registration Messages}
+
+\paragraph{RegisterRequest (288 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct RegisterRequest {
+    char username[32];      // 4-20 characters, alphanumeric
+    char password[64];      // SHA-256 hash (hex string)
+    char display_name[64];  // 2-30 characters
+    char email[128];        // Optional email address
+} __attribute__((packed));
+\end{lstlisting}
+
+\textbf{Field Constraints:}
+\begin{itemize}
+    \item \texttt{username}: 4-20 characters, alphanumeric only, must be unique
+    \item \texttt{password}: 64-character hex string (SHA-256 hash of password)
+    \item \texttt{display\_name}: 2-30 characters, UTF-8 allowed
+    \item \texttt{email}: Optional, if provided must be valid email format
+\end{itemize}
+
+\paragraph{RegisterResponse (133 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct RegisterResponse {
+    bool success;               // Registration succeeded?
+    uint32_t user_id;          // New user ID (0 if failed)
+    char error_message[128];   // Error details if failed
+} __attribute__((packed));
+\end{lstlisting}
+
+\textbf{Error Messages:}
+\begin{itemize}
+    \item "Username already exists"
+    \item "Username too short (minimum 4 characters)"
+    \item "Username too long (maximum 20 characters)"
+    \item "Invalid characters in username"
+    \item "Display name too short (minimum 2 characters)"
+\end{itemize}
+
+\subsubsection{Login Messages}
+
+\paragraph{LoginRequest (96 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct LoginRequest {
+    char username[32];      // Username
+    char password[64];      // SHA-256 hash (hex string)
+} __attribute__((packed));
+\end{lstlisting}
+
+\paragraph{LoginResponse (265 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct LoginResponse {
+    bool success;               // Login succeeded?
+    uint32_t user_id;          // User ID (0 if failed)
+    char session_token[64];    // New session token
+    char display_name[64];     // User's display name
+    int32_t elo_rating;        // Current ELO rating
+    char error_message[128];   // Error details if failed
+} __attribute__((packed));
+\end{lstlisting}
+
+\textbf{On Success:}
+\begin{itemize}
+    \item \texttt{success = true}
+    \item \texttt{user\_id}: Valid user ID
+    \item \texttt{session\_token}: Unique token for this session (64 chars)
+    \item \texttt{elo\_rating}: Player's current rating (default 1000)
+    \item \texttt{error\_message}: Empty
+\end{itemize}
+
+\textbf{On Failure:}
+\begin{itemize}
+    \item \texttt{success = false}
+    \item \texttt{user\_id = 0}
+    \item \texttt{session\_token}: Empty
+    \item \texttt{error\_message}: "Invalid username or password" or "User already logged in"
+\end{itemize}
+
+\subsubsection{Logout Messages}
+
+\paragraph{LogoutRequest (64 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct LogoutRequest {
+    char session_token[64];    // Current session token
+} __attribute__((packed));
+\end{lstlisting}
+
+\paragraph{LogoutResponse (1 byte)}
+
+\begin{lstlisting}[style=cppstyle]
+struct LogoutResponse {
+    bool success;    // Logout succeeded?
+} __attribute__((packed));
+\end{lstlisting}
+
+\subsubsection{Session Validation Messages}
+
+\paragraph{SessionValidateRequest (64 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct SessionValidateRequest {
+    char session_token[64];    // Session token to validate
+} __attribute__((packed));
+\end{lstlisting}
+
+\paragraph{SessionValidateResponse (233 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct SessionValidateResponse {
+    bool valid;                 // Is session valid?
+    uint32_t user_id;          // User ID (0 if invalid)
+    char username[32];         // Username
+    char display_name[64];     // Display name
+    int32_t elo_rating;        // Current ELO rating
+    char error_message[128];   // Error if invalid
+} __attribute__((packed));
+\end{lstlisting}
+
+
+\subsubsection{Password Security}
+
+\textbf{Double Hashing Strategy:}
+
+\begin{enumerate}
+    \item \textbf{Client-side}: \texttt{SHA-256(password)} → 64-character hex string
+    \begin{itemize}
+        \item Password never transmitted in plaintext
+        \item Hash computed using OpenSSL library
+    \end{itemize}
+
+    \item \textbf{Server-side}: \texttt{SHA-256(salt + client\_hash)} → Stored as \texttt{salt\$hash}
+    \begin{itemize}
+        \item 16-byte random salt (unique per user)
+        \item Prevents rainbow table attacks
+        \item Constant-time verification prevents timing attacks
+    \end{itemize}
+\end{enumerate}
+
+\textbf{Storage Format:} \texttt{a7f3e9d2\$5b9c8f...} (32-char salt + 64-char hash)
+
+\subsubsection{Binary Representation Example}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\textwidth]{images/hex_dump_login.png}
+\caption{LoginRequest Binary Representation (96 bytes)}
+\label{fig:hex_login}
+\end{figure}
+
+\subsubsection{Example Authentication Exchange}
+
+\textbf{Registration:}
+\begin{verbatim}
+Client → Server: AUTH_REGISTER
+  RegisterRequest {
+    username: "alice",
+    password: "5f4dcc3b5aa765d61d8327deb882cf99...", (SHA-256 hash)
+    display_name: "Alice Smith",
+    email: "alice@example.com"
+  }
+
+Server → Client: AUTH_RESPONSE
+  RegisterResponse {
+    success: true,
+    user_id: 42,
+    error_message: ""
+  }
+\end{verbatim}
+
+\textbf{Login:}
+\begin{verbatim}
+Client → Server: AUTH_LOGIN
+  LoginRequest {
+    username: "alice",
+    password: "5f4dcc3b5aa765d61d8327deb882cf99..."
+  }
+
+Server → Client: AUTH_RESPONSE
+  LoginResponse {
+    success: true,
+    user_id: 42,
+    session_token: "token_42_a7f3e9d2c1b8f4a6e3d7c9b2a5f1e8d4",
+    display_name: "Alice Smith",
+    elo_rating: 1000,
+    error_message: ""
+  }
+\end{verbatim}

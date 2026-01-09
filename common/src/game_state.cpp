@@ -188,8 +188,8 @@ void Board::randomPlacement() {
 // MatchState implementation
 MatchState::MatchState()
     : current_turn_player_id(0), turn_number(0), turn_time_limit(20),
-      start_time(0), end_time(0), result(RESULT_DRAW), winner_id(0),
-      is_active(false), is_paused(false) {
+      turn_start_time(0), start_time(0), end_time(0), result(RESULT_DRAW),
+      winner_id(0), is_active(false), is_paused(false) {
 }
 
 MatchState::~MatchState() {
@@ -218,6 +218,7 @@ void MatchState::endMatch(uint32_t winner) {
 void MatchState::switchTurn() {
     current_turn_player_id = (current_turn_player_id == player1_id) ? player2_id : player1_id;
     turn_number++;
+    turn_start_time = time(nullptr);  // Record turn start time
 }
 
 ShotResult MatchState::processMove(uint32_t player_id, Coordinate target) {

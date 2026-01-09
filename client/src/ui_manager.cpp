@@ -190,8 +190,9 @@ void UIManager::initialize(int argc, char* argv[]) {
         GTK_STYLE_PROVIDER_PRIORITY_USER
     );
 
-    // Connect destroy signal
-    g_signal_connect(main_window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    // Connect window close event handlers
+    g_signal_connect(main_window, "delete-event", G_CALLBACK(onWindowDeleteEvent), this);
+    g_signal_connect(main_window, "destroy", G_CALLBACK(onWindowDestroy), this);
 
     // Start animation timer - slower to reduce CPU usage
     std::cout << "TIME: Starting animation timer..." << std::endl;
@@ -459,6 +460,60 @@ void UIManager::resignMatch() {
     } else {
         std::cout << "[UI] Not in multiplayer match, cannot resign" << std::endl;
     }
+}
+
+bool UIManager::handleApplicationExit() {
+    // Check if in active match
+    bool in_match = (current_match_id > 0 &&
+                     network &&
+                     network->isConnected());
+
+    if (in_match) {
+        // Show confirmation dialog
+        GtkWidget* dialog = gtk_message_dialog_new(
+            GTK_WINDOW(main_window),
+            GTK_DIALOG_MODAL,
+            GTK_MESSAGE_WARNING,
+            GTK_BUTTONS_YES_NO,
+            "You are in an active match!\n\n"
+            "Exiting now will forfeit the game and your opponent will win.\n\n"
+            "Are you sure you want to exit?"
+        );
+
+        int response = gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+
+        if (response == GTK_RESPONSE_YES) {
+            // User confirmed exit - resign match
+            std::cout << "[UI] Player confirmed exit during match - resigning" << std::endl;
+
+            if (network && network->isConnected()) {
+                network->sendResign(current_match_id);
+                // Small delay to ensure message is sent
+                usleep(100000);  // 100ms
+            }
+
+            gtk_main_quit();
+            return false;  // Exit proceeding
+        } else {
+            // User cancelled exit
+            std::cout << "[UI] Player cancelled exit" << std::endl;
+            return true;  // Exit cancelled
+        }
+    } else {
+        // Not in match - just quit
+        gtk_main_quit();
+        return false;
+    }
+}
+
+gboolean UIManager::onWindowDeleteEvent(GtkWidget* /*widget*/, GdkEvent* /*event*/, gpointer data) {
+    UIManager* ui = static_cast<UIManager*>(data);
+    return ui->handleApplicationExit() ? TRUE : FALSE;  // TRUE = cancel close
+}
+
+void UIManager::onWindowDestroy(GtkWidget* /*widget*/, gpointer /*data*/) {
+    gtk_main_quit();
 }
 
 void UIManager::makeDraggable(GtkWidget* widget, GtkWidget* /*window*/) {
@@ -1141,18 +1196,21 @@ void UIManager::onTurnTimerExpired() {
     // Clear any selected target
     clearTargetSelection();
 
-    // Auto-switch turn when time expires (FR-015)
-    switchTurn();
+    // In network mode, report timeout to server (server will handle turn switch)
+    if (!is_bot_mode && current_match_id > 0 && network) {
+        std::cout << "[UI] Reporting timeout to server for match " << current_match_id << std::endl;
+        network->sendTurnTimeout(current_match_id);
+        // DO NOT call switchTurn() locally - wait for server's TURN_UPDATE
+        // Timer will restart when we receive TURN_UPDATE from server
+    } else if (is_bot_mode) {
+        // Bot mode: handle locally as before
+        switchTurn();
 
-    // If in bot mode and now bot's turn, trigger bot AI
-    if (is_bot_mode && !is_player_turn) {
-        g_timeout_add(1000, UIManager::botTurnCallback, this);
-    } else if (!is_bot_mode) {
-        // Start timer for opponent's turn
-        startTurnTimer(20);
-    } else {
-        // Player's turn again, start timer
-        startTurnTimer(20);
+        if (!is_player_turn) {
+            g_timeout_add(1000, UIManager::botTurnCallback, this);
+        } else {
+            startTurnTimer(20);
+        }
     }
 }
 

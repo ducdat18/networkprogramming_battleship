@@ -36,8 +36,9 @@ enum MessageType {
     MOVE = 31,
     MOVE_RESULT = 32,
     TURN_UPDATE = 33,
-    MATCH_STATE = 34,
-    MATCH_END = 35,
+    TURN_TIMEOUT = 34,
+    MATCH_STATE = 35,
+    MATCH_END = 36,
 
     // Match actions
     PAUSE_REQUEST = 40,

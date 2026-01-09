@@ -1,0 +1,29 @@
+%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'16px'}}}%%
+graph LR
+    subgraph Complete["Complete Network Message"]
+        direction LR
+        H["Header<br/><b>77 bytes</b><br/>(fixed)"]
+        P["Payload<br/><b>0-4096 bytes</b><br/>(variable)"]
+        H ---|concatenated| P
+    end
+
+    subgraph Header["MessageHeader Breakdown"]
+        direction TB
+        F1["type<br/>uint8_t<br/><b>1 byte</b>"]
+        F2["length<br/>uint32_t<br/><b>4 bytes</b>"]
+        F3["timestamp<br/>uint64_t<br/><b>8 bytes</b>"]
+        F4["session_token<br/>char[64]<br/><b>64 bytes</b>"]
+
+        F1 --> F2 --> F3 --> F4
+    end
+
+    Complete -.-> Header
+
+    style Complete fill:#e1f5ff,stroke:#0277bd,stroke-width:2px
+    style Header fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    style H fill:#ffcccc,stroke:#c62828
+    style P fill:#c8e6c9,stroke:#2e7d32
+    style F1 fill:#ffcccc
+    style F2 fill:#fff59d
+    style F3 fill:#b3e5fc
+    style F4 fill:#f8bbd0

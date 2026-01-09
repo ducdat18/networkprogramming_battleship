@@ -1,0 +1,188 @@
+\subsection{Serialization \& Wire Format Examples}
+
+This section explains how message structs are serialized to binary format for network transmission and provides real-world examples.
+
+\subsubsection{Serialization Mechanism}
+
+The protocol uses \textbf{binary serialization} with packed C structs. This approach directly maps memory structures to network bytes without intermediate encoding (unlike JSON or XML).
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{images/serialization_process.png}
+\caption{Complete Serialization and Deserialization Process}
+\label{fig:serialization_process}
+\end{figure}
+
+\paragraph{Serialization Approach}
+
+The protocol uses **direct memory mapping** for serialization:
+
+\begin{itemize}
+    \item \textbf{Serialize}: Cast struct pointer to \texttt{char*}, copy \texttt{sizeof(T)} bytes
+    \item \textbf{Deserialize}: Validate size, then \texttt{memcpy} into struct
+    \item \textbf{Zero overhead}: No parsing, no intermediate representation
+    \item \textbf{Type-safe}: Template functions ensure correct struct types
+\end{itemize}
+
+\textbf{Example Flow:}
+\begin{verbatim}
+LoginRequest struct (in memory)
+    ↓ serialize()
+Binary string (96 bytes)
+    ↓ send()
+Network transmission
+    ↓ recv()
+Binary string (96 bytes)
+    ↓ deserialize()
+LoginRequest struct (in memory)
+\end{verbatim}
+
+\subsubsection{Packed Structs}
+
+The \texttt{\_\_attribute\_\_((packed))} directive is \textbf{critical} for binary compatibility:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Struct} & \textbf{Without Packing} & \textbf{With Packing} \\ \hline
+Size & 8 bytes (padding added) & 5 bytes (exact) \\ \hline
+Compatibility & ✗ Platform-dependent & ✓ Consistent \\ \hline
+Network & ✗ Incompatible & ✓ Works \\ \hline
+\end{tabular}
+\caption{Impact of Struct Packing}
+\end{table}
+
+Without packing, compilers add alignment padding which varies by architecture (x86, ARM, etc.), causing deserialization errors.
+
+\subsubsection{Hex Dump Example: LoginRequest}
+
+\textbf{LoginRequest Structure:}
+\begin{lstlisting}[style=cppstyle]
+LoginRequest {
+    username: "alice",
+    password: "5f4dcc3b5aa765d61d8327deb882cf99"
+              "2af9ce19b66abbed229bdeb6af04d29c"
+}
+\end{lstlisting}
+
+\textbf{Binary Representation (96 bytes):}
+
+\begin{verbatim}
+Offset(h) 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F  ASCII
+------------------------------------------------------------------------
+00000000  61 6c 69 63 65 00 00 00 00 00 00 00 00 00 00 00  alice...........
+00000010  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+00000020  35 66 34 64 63 63 33 62 35 61 61 37 36 35 64 36  5f4dcc3b5aa765d6
+00000030  31 64 38 33 32 37 64 65 62 38 38 32 63 66 39 39  1d8327deb882cf99
+00000040  32 61 66 39 63 65 31 39 62 36 36 61 62 62 65 64  2af9ce19b66abbed
+00000050  32 32 39 62 64 65 62 36 61 66 30 34 64 32 39 63  229bdeb6af04d29c
+------------------------------------------------------------------------
+Total: 96 bytes (0x60)
+\end{verbatim}
+
+\textbf{Analysis:}
+\begin{itemize}
+    \item \textbf{Offset 0x00-0x1F (32 bytes):} Username field "alice" + null padding
+    \item \textbf{Offset 0x20-0x5F (64 bytes):} SHA-256 hash as hex string
+\end{itemize}
+
+\subsubsection{Hex Dump Example: MoveMessage}
+
+\textbf{MoveMessage Structure:}
+\begin{lstlisting}[style=cppstyle]
+MoveMessage {
+    match_id: 123 (0x0000007B),
+    target: {row: 5, col: 7}
+}
+\end{lstlisting}
+
+\textbf{Binary Representation (6 bytes, little-endian):}
+
+\begin{verbatim}
+Offset(h) 00 01 02 03 04 05  Interpretation
+-------------------------------------------------
+00000000  7B 00 00 00 05 07  |{.....  |
+          |__________|  |  |
+          match_id(4)  row col
+\end{verbatim}
+
+\textbf{Breakdown:}
+\begin{itemize}
+    \item \texttt{0x7B 00 00 00}: match\_id = 123 (uint32\_t, little-endian)
+    \item \texttt{0x05}: row = 5 (int8\_t)
+    \item \texttt{0x07}: col = 7 (int8\_t)
+\end{itemize}
+
+\subsubsection{Complete Message Example}
+
+\textbf{Full network transmission of a MOVE message:}
+
+\begin{verbatim}
++------------------+------------------+
+| MessageHeader    | Payload          |
+| (77 bytes)       | (6 bytes)        |
++------------------+------------------+
+
+MessageHeader (77 bytes):
+  type:           0x1F (31 = MessageType::MOVE)
+  length:         0x06 00 00 00 (6 bytes)
+  timestamp:      0x6B 8A 9C 65 00 00 00 00 (Unix time: 1703812715)
+  session_token:  "token_42_a7f3e9d2c1b8f4a6e3d7c9b2a5f1e8d4..."
+
+Payload (6 bytes):
+  match_id:       0x7B 00 00 00 (123)
+  target.row:     0x05 (5)
+  target.col:     0x07 (7)
+
+Total: 83 bytes sent over TCP socket
+\end{verbatim}
+
+\subsubsection{Endianness}
+
+The protocol uses \textbf{little-endian} byte order (x86/x64 standard):
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Value} & \textbf{Memory Layout (Little-Endian)} \\ \hline
+0x12345678 & 78 56 34 12 \\ \hline
+123 (0x0000007B) & 7B 00 00 00 \\ \hline
+\end{tabular}
+\caption{Little-Endian Byte Order}
+\end{table}
+
+\textbf{Note:} Since both client and server run on x86/x64 Linux, no byte-order conversion is needed. For cross-platform support (ARM, MIPS), functions like \texttt{htonl/ntohl} would be required.
+
+\subsubsection{Size Validation}
+
+All deserialization includes strict size validation:
+
+\begin{itemize}
+    \item \textbf{Exact match required}: \texttt{payload.size() == sizeof(T)}
+    \item \textbf{Reject if incomplete}: Prevents buffer underflows
+    \item \textbf{Reject if too large}: Prevents buffer overflows
+\end{itemize}
+
+This prevents malformed or malicious messages from corrupting system state.
+
+\subsubsection{Advantages of Binary Serialization}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Feature} & \textbf{Binary} & \textbf{JSON} \\ \hline
+Message Size & Small (96 bytes) & Large (~200 bytes) \\ \hline
+Parsing Speed & Fast (memcpy) & Slow (parsing) \\ \hline
+Type Safety & Strong (compiled) & Weak (runtime) \\ \hline
+Human Readable & No & Yes \\ \hline
+Debugging & Hex dumps & Easy inspection \\ \hline
+Bandwidth & Efficient & Wasteful \\ \hline
+\end{tabular}
+\caption{Binary vs JSON Serialization Comparison}
+\label{tab:serialization_comparison}
+\end{table}
+
+For a real-time game where performance matters, binary serialization is the superior choice despite reduced human readability.

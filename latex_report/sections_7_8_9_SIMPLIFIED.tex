@@ -1,0 +1,447 @@
+% ============================================
+% SECTION 4: APPLICATION FEATURES (Simplified)
+% ============================================
+
+\section{Application Features \& Implementation}
+
+\subsection{Phase 1: Networking}
+
+The networking layer implements TCP client-server architecture with multi-threading.
+
+\subsubsection{Server Implementation}
+
+\textbf{Components:}
+\begin{itemize}
+    \item \textbf{Main Thread}: Accepts connections on port 8888
+    \item \textbf{Client Threads}: One thread per client for message processing
+    \item \textbf{Thread-Safe Registry}: Mutex-protected client map
+\end{itemize}
+
+\textbf{Socket Setup:}
+\begin{enumerate}
+    \item Create TCP socket: \texttt{socket(AF\_INET, SOCK\_STREAM, 0)}
+    \item Bind to port 8888 with \texttt{SO\_REUSEADDR}
+    \item Listen with backlog 10
+    \item Accept loop: Create thread per client
+\end{enumerate}
+
+\subsubsection{Client Implementation}
+
+\textbf{Connection States:}
+\begin{lstlisting}[style=cppstyle]
+enum class ConnectionStatus {
+    DISCONNECTED,    // Not connected
+    CONNECTING,      // Connection in progress
+    CONNECTED,       // Connected, not authenticated
+    AUTHENTICATED    // Fully authenticated
+};
+\end{lstlisting}
+
+\textbf{Async Receive:}
+\begin{itemize}
+    \item Background thread continuously \texttt{recv()} header (77 bytes)
+    \item Validate and receive payload
+    \item Queue message for main thread processing
+\end{itemize}
+
+\textbf{Key Features:}
+\begin{itemize}
+    \item Thread-safe sending with \texttt{send\_mutex\_}
+    \item 5-second socket timeout
+    \item \texttt{MSG\_WAITALL} for atomic reads
+    \item Graceful disconnect handling
+\end{itemize}
+
+% No screenshots needed for Phase 1 (internal networking)
+
+\subsection{Phase 2: Authentication System}
+
+\subsubsection{User Registration}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{images/registration_screen.png}
+\caption{User Registration Screen}
+\label{fig:registration_screen}
+\end{figure}
+
+\textbf{Validation Rules:}
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Field} & \textbf{Validation} \\ \hline
+Username & 4-20 characters, alphanumeric, unique \\ \hline
+Password & Minimum 6 characters \\ \hline
+Display Name & 2-30 characters, UTF-8 allowed \\ \hline
+Email & Optional, valid email format if provided \\ \hline
+\end{tabular}
+\caption{Registration Field Validation}
+\end{table}
+
+\textbf{Server Process:}
+\begin{enumerate}
+    \item Validate input fields
+    \item Hash password with SHA-256 + salt
+    \item Insert into \texttt{users} table (initial ELO=1000)
+    \item Return success with \texttt{user\_id} or error message
+\end{enumerate}
+
+\subsubsection{Password Security}
+
+\textbf{Double Hashing Strategy:}
+\begin{enumerate}
+    \item \textbf{Client-side}: \texttt{SHA-256(password)} → 64-character hex string
+    \begin{itemize}
+        \item Password never transmitted in plaintext
+        \item Uses OpenSSL library
+    \end{itemize}
+
+    \item \textbf{Server-side}: \texttt{SHA-256(salt + client\_hash)} → Stored as \texttt{salt\$hash}
+    \begin{itemize}
+        \item 16-byte random salt (unique per user)
+        \item Prevents rainbow table attacks
+        \item Constant-time verification prevents timing attacks
+    \end{itemize}
+\end{enumerate}
+
+\textbf{Storage Format:} \texttt{a7f3e9d2c1b8f4a6\$5b9c8f7e...} (32-char salt + 64-char hash)
+
+\subsubsection{Login \& Session Management}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{images/login_screen.png}
+\caption{Login Screen}
+\label{fig:login_screen}
+\end{figure}
+
+\textbf{Login Flow:}
+\begin{enumerate}
+    \item User enters username/password
+    \item Client hashes password with SHA-256
+    \item Server validates credentials against database
+    \item Server generates unique session token
+    \item Server stores session (24-hour expiration)
+    \item Client receives token + user data (ELO rating)
+    \item Client saves token for auto-login
+\end{enumerate}
+
+\textbf{Session Token Format:} \texttt{token\_\{user\_id\}\_\{random\_32\_chars\}}
+
+\textbf{Session Storage:} SQLite \texttt{sessions} table
+\begin{lstlisting}[style=sqlstyle]
+CREATE TABLE sessions (
+    session_id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    session_token TEXT UNIQUE NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+\end{lstlisting}
+
+\subsubsection{Auto-Login}
+
+\textbf{Session Persistence:}
+\begin{itemize}
+    \item Client saves token to \texttt{\~{}/.battleship/session.txt}
+    \item File permissions: 0600 (owner read/write only)
+\end{itemize}
+
+\textbf{Auto-Login Flow:}
+\begin{enumerate}
+    \item On startup: Load token from file
+    \item Send \texttt{VALIDATE\_SESSION} request to server
+    \item If valid → Skip login screen, go to lobby
+    \item If invalid/expired → Show login screen, delete token
+\end{enumerate}
+
+\subsubsection{Database Schema}
+
+\textbf{users table:}
+\begin{lstlisting}[style=sqlstyle]
+CREATE TABLE users (
+    user_id INTEGER PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,  -- salt$hash format
+    display_name TEXT NOT NULL,
+    elo_rating INTEGER DEFAULT 1000,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_login DATETIME
+);
+\end{lstlisting}
+
+\textbf{Security Features:}
+\begin{itemize}
+    \item Double hashing (client + server with salt)
+    \item 16-byte cryptographically secure random salt
+    \item 24-hour session expiration
+    \item Restrictive file permissions (0600)
+    \item No plaintext passwords anywhere
+\end{itemize}
+
+\subsection{Phase 3: Matchmaking System}
+
+\subsubsection{Player List \& Lobby}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.95\textwidth]{images/lobby_player_list.png}
+\caption{Lobby Screen with Online Player List}
+\label{fig:lobby}
+\end{figure}
+
+\textbf{Display Information:}
+\begin{itemize}
+    \item Username (unique identifier)
+    \item Display Name (friendly name)
+    \item ELO Rating (skill level, default 1000)
+    \item Status (color-coded indicator)
+\end{itemize}
+
+\textbf{Player Status:}
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Status} & \textbf{Color} & \textbf{Meaning} \\ \hline
+ONLINE & \textcolor{darkgreen}{Green} & Available for challenges \\ \hline
+IN\_GAME & \textcolor{darkorange}{Orange} & Currently playing \\ \hline
+BUSY & \textcolor{darkred}{Red} & Not accepting challenges \\ \hline
+OFFLINE & \textcolor{darkgray}{Gray} & Disconnected \\ \hline
+\end{tabular}
+\caption{Player Status Indicators}
+\end{table}
+
+\textbf{Real-time Updates:}
+
+Server broadcasts \texttt{PLAYER\_STATUS\_UPDATE} when:
+\begin{itemize}
+    \item Player logs in/out
+    \item Player starts/ends a match
+    \item Player changes availability status
+\end{itemize}
+
+Clients automatically update UI when receiving status updates, providing real-time lobby experience.
+
+\subsubsection{Challenge System}
+
+\begin{figure}[h]
+\centering
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{images/challenge_send_dialog.png}
+    \caption{Challenge Send Dialog}
+    \label{fig:challenge_send}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{images/challenge_received_popup.png}
+    \caption{Challenge Received Popup}
+    \label{fig:challenge_received}
+\end{minipage}
+\end{figure}
+
+\textbf{Challenge Workflow:}
+\begin{enumerate}
+    \item Player A selects Player B from lobby list
+    \item Player A clicks "Challenge" button
+    \item Dialog appears with game settings:
+    \begin{itemize}
+        \item Time limit per turn: 0 (unlimited), 30-300 seconds
+        \item Random ship placement option
+    \end{itemize}
+    \item Client sends \texttt{CHALLENGE\_SEND} to server
+    \item Server validates: target online, available, not self
+    \item Server forwards \texttt{CHALLENGE\_RECEIVED} to Player B
+    \item Player B sees popup notification
+    \item Player B clicks "Accept" or "Decline" (60-second timeout)
+    \item On accept: Server creates match, sends \texttt{MATCH\_START} to both
+    \item On decline/timeout: Server notifies Player A
+\end{enumerate}
+
+\textbf{Challenge Management:}
+\begin{itemize}
+    \item \textbf{Validation}: Cannot challenge self, offline, or in-game players
+    \item \textbf{Expiration}: 60-second timeout if not responded
+    \item \textbf{Cleanup}: Background thread checks expired challenges every 5 seconds
+\end{itemize}
+
+\subsubsection{Match Creation}
+
+When challenge is accepted:
+\begin{enumerate}
+    \item Insert match record into database (\texttt{matches} table)
+    \item Create \texttt{MatchState} object in memory
+    \item Randomly select first player
+    \item Send \texttt{MATCH\_START} to both players with opponent info
+    \item Update player status to \texttt{IN\_GAME}
+    \item Both players transition to ship placement screen
+\end{enumerate}
+
+\textbf{Database Schema:}
+\begin{lstlisting}[style=sqlstyle]
+CREATE TABLE matches (
+    match_id INTEGER PRIMARY KEY,
+    player1_id INTEGER NOT NULL,
+    player2_id INTEGER NOT NULL,
+    winner_id INTEGER,
+    status TEXT DEFAULT 'in_progress',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ended_at DATETIME,
+    FOREIGN KEY (player1_id) REFERENCES users(user_id),
+    FOREIGN KEY (player2_id) REFERENCES users(user_id)
+);
+\end{lstlisting}
+
+\subsection{Phase 4: Gameplay}
+
+\subsubsection{Ship Placement}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\textwidth]{images/ship_placement_screen.png}
+\caption{Ship Placement Screen}
+\label{fig:ship_placement}
+\end{figure}
+
+\textbf{Ship Types:}
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Ship Type} & \textbf{Length} \\ \hline
+Carrier & 5 cells \\ \hline
+Battleship & 4 cells \\ \hline
+Cruiser & 3 cells \\ \hline
+Submarine & 3 cells \\ \hline
+Destroyer & 2 cells \\ \hline
+\end{tabular}
+\caption{Ship Types and Sizes}
+\end{table}
+
+\textbf{Placement Features:}
+\begin{itemize}
+    \item \textbf{Manual Placement}: Drag-and-drop ships on 10x10 grid
+    \item \textbf{Rotation}: Toggle horizontal/vertical orientation
+    \item \textbf{Random Placement}: Auto-place all ships randomly
+    \item \textbf{Validation}: No overlapping, within bounds
+    \item \textbf{Ready Button}: Confirm placement when all 5 ships placed
+\end{itemize}
+
+\textbf{Ship Placement Message (50 bytes):}
+\begin{lstlisting}[style=cppstyle]
+struct ShipPlacementMessage {
+    uint32_t match_id;
+    Ship ships[5];          // All 5 ships
+    bool ready;             // Ready to start?
+} __attribute__((packed));
+\end{lstlisting}
+
+\textbf{Server Validation:}
+\begin{enumerate}
+    \item All 5 ships must be placed
+    \item Ships must not overlap
+    \item Ships must be within 10x10 grid
+    \item Each ship type used exactly once
+    \item When both players ready → Send \texttt{MATCH\_READY}
+\end{enumerate}
+
+\subsubsection{Turn-Based Gameplay}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.95\textwidth]{images/game_board.png}
+\caption{Game Board - Player Grid (left) and Opponent Grid (right)}
+\label{fig:game_board}
+\end{figure}
+
+\textbf{Game Board Layout:}
+\begin{itemize}
+    \item \textbf{Left Grid}: Your ships (visible)
+    \item \textbf{Right Grid}: Opponent board (attack grid, ships hidden)
+    \item \textbf{Turn Indicator}: Shows whose turn (color-coded)
+    \item \textbf{Timer}: Countdown if time limit enabled
+    \item \textbf{Statistics}: Shots fired, hits, accuracy
+\end{itemize}
+
+\textbf{Move Flow:}
+\begin{enumerate}
+    \item Wait for your turn (turn indicator updates)
+    \item Click coordinate on opponent grid
+    \item Send \texttt{MOVE} message (6 bytes: match\_id + coordinate)
+    \item Server processes shot, checks hit/miss/sunk
+    \item Server broadcasts \texttt{MOVE\_RESULT} to both players
+    \item Update UI: Mark hit/miss, show if ship sunk
+    \item Server sends \texttt{TURN\_UPDATE} to switch turns
+    \item Repeat until all ships sunk
+\end{enumerate}
+
+\textbf{Shot Results:}
+\begin{itemize}
+    \item \textbf{MISS}: Water hit (mark with ○)
+    \item \textbf{HIT}: Ship hit (mark with ×, ship damaged)
+    \item \textbf{SUNK}: Ship destroyed (all parts hit, show ship type)
+\end{itemize}
+
+\textbf{MoveResultMessage (25 bytes):}
+\begin{lstlisting}[style=cppstyle]
+struct MoveResultMessage {
+    uint32_t match_id;
+    uint32_t shooter_id;
+    Coordinate target;
+    ShotResult result;          // MISS/HIT/SUNK
+    ShipType ship_sunk;         // If SUNK, which ship
+    uint32_t ships_remaining;   // Opponent ships left
+    bool game_over;             // All ships sunk?
+    uint32_t winner_id;
+} __attribute__((packed));
+\end{lstlisting}
+
+\subsubsection{Match End}
+
+\textbf{Game Over Conditions:}
+\begin{itemize}
+    \item All opponent ships sunk (normal win)
+    \item Player resigns
+    \item Player disconnects
+    \item Time limit exceeded
+    \item Both players agree to draw
+\end{itemize}
+
+\textbf{Match End Message:}
+Server sends \texttt{MATCH\_END} with:
+\begin{itemize}
+    \item Result: WIN/LOSS/DRAW
+    \item Winner ID
+    \item ELO rating change (+/- points)
+    \item New ELO rating
+    \item Match statistics (total moves, duration, accuracy)
+    \item Reason text
+\end{itemize}
+
+\textbf{Post-Game:}
+\begin{itemize}
+    \item Display match results screen
+    \item Update ELO rating
+    \item Save match to database (replay available)
+    \item Options: Rematch, Return to lobby
+\end{itemize}
+
+\textbf{Database Storage:}
+\begin{lstlisting}[style=sqlstyle]
+-- Store all moves for replay
+CREATE TABLE match_moves (
+    move_id INTEGER PRIMARY KEY,
+    match_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    move_number INTEGER NOT NULL,
+    x INTEGER NOT NULL,
+    y INTEGER NOT NULL,
+    result TEXT NOT NULL,  -- miss/hit/sunk
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (match_id) REFERENCES matches(match_id)
+);
+\end{lstlisting}

@@ -136,7 +136,12 @@ GtkWidget* UIManager::createGameScreen() {
     g_signal_connect(btn_resign, "clicked", G_CALLBACK(on_resign_clicked), this);
     g_signal_connect(btn_back, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
         UIManager* ui = static_cast<UIManager*>(data);
-        ui->showScreen(SCREEN_LOBBY);  // Return to lobby instead
+        // Resign if in online match
+        if (!ui->is_bot_mode && ui->current_match_id > 0) {
+            ui->resignMatch();
+        } else {
+            ui->showScreen(SCREEN_LOBBY);
+        }
     }), this);
 
     // Chat - Pixel style with proper colors
@@ -295,9 +300,10 @@ GtkWidget* UIManager::createMainMenuScreen() {
     // Close button
     GtkWidget* close_btn = gtk_button_new_with_label("X");
     gtk_widget_set_size_request(close_btn, 40, 40);
-    g_signal_connect(close_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer) {
-        gtk_main_quit();
-    }), nullptr);
+    g_signal_connect(close_btn, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->handleApplicationExit();
+    }), this);
 
     gtk_box_pack_start(GTK_BOX(header), logo, FALSE, FALSE, 10);
     gtk_box_pack_start(GTK_BOX(header), header_title, FALSE, FALSE, 0);
@@ -351,9 +357,10 @@ GtkWidget* UIManager::createMainMenuScreen() {
     gtk_widget_set_size_request(btn_exit, 400, 50);
     GtkStyleContext* exit_context = gtk_widget_get_style_context(btn_exit);
     gtk_style_context_add_class(exit_context, "secondary");
-    g_signal_connect(btn_exit, "clicked", G_CALLBACK(+[](GtkButton*, gpointer) {
-        gtk_main_quit();
-    }), nullptr);
+    g_signal_connect(btn_exit, "clicked", G_CALLBACK(+[](GtkButton*, gpointer data) {
+        UIManager* ui = static_cast<UIManager*>(data);
+        ui->handleApplicationExit();
+    }), this);
 
     gtk_box_pack_start(GTK_BOX(content), title, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(content), subtitle, FALSE, FALSE, 0);

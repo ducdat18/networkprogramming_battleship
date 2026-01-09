@@ -1,0 +1,360 @@
+\subsection{Phase 2: Authentication System}
+
+The authentication system handles user registration, login, session management, and auto-login functionality with strong security measures.
+
+\subsubsection{User Registration}
+
+\paragraph{Registration UI}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{images/registration_screen.png}
+\caption{User Registration Screen}
+\label{fig:registration_screen}
+\end{figure}
+
+\paragraph{Validation Rules}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Field} & \textbf{Validation} \\ \hline
+Username & 4-20 characters, alphanumeric only, must be unique \\ \hline
+Password & Minimum 6 characters, any characters allowed \\ \hline
+Display Name & 2-30 characters, UTF-8 allowed \\ \hline
+Email & Optional, valid email format if provided \\ \hline
+\end{tabular}
+\caption{Registration Field Validation}
+\label{tab:registration_validation}
+\end{table}
+
+\paragraph{Registration Process}
+
+\textbf{Server validates and creates user:}
+\begin{enumerate}
+    \item Validate username (4-20 chars, unique)
+    \item Validate display name (2-30 chars)
+    \item Hash password with salt (SHA-256)
+    \item Insert into database with initial ELO=1000
+    \item Return success with user\_id or error message
+\end{enumerate}
+
+\subsubsection{Password Security}
+
+\paragraph{Password Hashing Flow}
+
+The password is hashed twice for security:
+
+\begin{enumerate}
+    \item \textbf{Client-side}: SHA-256(password) → 64-char hex string
+    \item \textbf{Server-side}: SHA-256(salt + client\_hash) → stored as \texttt{salt\$hash}
+\end{enumerate}
+
+\paragraph{Client-Side Hashing}
+
+Located in \texttt{client/src/password\_hash.cpp}:
+
+\begin{lstlisting}[style=cppstyle]
+#include <openssl/sha.h>
+
+std::string hashPasswordClient(const std::string& password) {
+    // SHA-256 hash
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha256;
+    SHA256_Init(&sha256);
+    SHA256_Update(&sha256, password.c_str(), password.size());
+    SHA256_Final(hash, &sha256);
+
+    // Convert to hex string (64 characters)
+    char hex_string[65];
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+        sprintf(&hex_string[i*2], "%02x", hash[i]);
+    }
+    hex_string[64] = '\0';
+
+    return std::string(hex_string);
+}
+\end{lstlisting}
+
+\paragraph{Server-Side Salted Hashing}
+
+Located in \texttt{common/src/password\_hash.cpp}:
+
+\begin{lstlisting}[style=cppstyle]
+#include <openssl/rand.h>
+#include <openssl/sha.h>
+
+std::string hashPassword(const std::string& password_hash) {
+    // Generate random 16-byte salt
+    unsigned char salt[16];
+    if (RAND_bytes(salt, 16) != 1) {
+        throw std::runtime_error("Failed to generate salt");
+    }
+
+    // Hash: SHA256(salt + password_hash)
+    unsigned char final_hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha256;
+    SHA256_Init(&sha256);
+    SHA256_Update(&sha256, salt, 16);
+    SHA256_Update(&sha256, password_hash.c_str(),
+                  password_hash.size());
+    SHA256_Final(final_hash, &sha256);
+
+    // Convert to hex
+    std::string salt_hex = hexEncode(salt, 16);
+    std::string hash_hex = hexEncode(final_hash,
+                                     SHA256_DIGEST_LENGTH);
+
+    // Store as: salt$hash
+    return salt_hex + "$" + hash_hex;
+}
+
+bool verifyPassword(const std::string& password_hash,
+                    const std::string& stored_hash) {
+    // Split stored_hash into salt and hash
+    size_t pos = stored_hash.find('$');
+    if (pos == std::string::npos) {
+        return false;
+    }
+
+    std::string salt_hex = stored_hash.substr(0, pos);
+    std::string expected_hash_hex = stored_hash.substr(pos + 1);
+
+    // Decode salt from hex
+    unsigned char salt[16];
+    hexDecode(salt_hex, salt, 16);
+
+    // Recompute hash with same salt
+    unsigned char computed_hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha256;
+    SHA256_Init(&sha256);
+    SHA256_Update(&sha256, salt, 16);
+    SHA256_Update(&sha256, password_hash.c_str(),
+                  password_hash.size());
+    SHA256_Final(computed_hash, &sha256);
+
+    std::string computed_hex = hexEncode(computed_hash,
+                                         SHA256_DIGEST_LENGTH);
+
+    // Constant-time comparison (prevent timing attacks)
+    return computed_hex == expected_hash_hex;
+}
+\end{lstlisting}
+
+\subsubsection{Login \& Session Management}
+
+\paragraph{Login UI}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{images/login_screen.png}
+\caption{Login Screen}
+\label{fig:login_screen}
+\end{figure}
+
+\paragraph{Login Flow}
+
+\begin{enumerate}
+    \item User enters username and password
+    \item Client hashes password with SHA-256
+    \item Client sends \texttt{AUTH\_LOGIN} with hashed password
+    \item Server validates credentials against database
+    \item Server generates unique session token
+    \item Server stores session in database (24h expiration)
+    \item Server sends \texttt{AUTH\_RESPONSE} with session token and user data
+    \item Client stores session token for subsequent requests
+\end{enumerate}
+
+\paragraph{Session Token Generation}
+
+\begin{lstlisting}[style=cppstyle]
+std::string generateSessionToken(uint32_t user_id) {
+    // Generate random 32-byte token
+    unsigned char random_bytes[32];
+    RAND_bytes(random_bytes, 32);
+    std::string random_hex = hexEncode(random_bytes, 32);
+
+    // Format: token_{user_id}_{random_hash}
+    return "token_" + std::to_string(user_id) +
+           "_" + random_hex.substr(0, 32);
+}
+\end{lstlisting}
+
+\paragraph{Session Storage}
+
+Database schema in \texttt{server/src/database.cpp}:
+
+\begin{lstlisting}[style=sqlstyle]
+CREATE TABLE sessions (
+    session_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    session_token TEXT UNIQUE NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+        ON DELETE CASCADE
+);
+
+-- Index for fast token lookup
+CREATE INDEX idx_session_token ON sessions(session_token);
+
+-- Index for expiration cleanup
+CREATE INDEX idx_expires_at ON sessions(expires_at);
+\end{lstlisting}
+
+\paragraph{Session Validation}
+
+\begin{lstlisting}[style=cppstyle]
+bool DatabaseManager::validateSession(
+    const std::string& session_token,
+    uint32_t& user_id
+) {
+    const char* sql =
+        "SELECT user_id FROM sessions "
+        "WHERE session_token = ? "
+        "AND expires_at > datetime('now')";
+
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
+    sqlite3_bind_text(stmt, 1, session_token.c_str(), -1,
+                      SQLITE_STATIC);
+
+    bool valid = false;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        user_id = sqlite3_column_int(stmt, 0);
+        valid = true;
+    }
+
+    sqlite3_finalize(stmt);
+    return valid;
+}
+\end{lstlisting}
+
+\subsubsection{Auto-Login Feature}
+
+\paragraph{Session Persistence}
+
+Located in \texttt{client/src/session\_storage.cpp}:
+
+\begin{lstlisting}[style=cppstyle]
+class SessionStorage {
+private:
+    std::string getSessionFilePath() {
+        const char* home = getenv("HOME");
+        if (!home) {
+            throw std::runtime_error("HOME not set");
+        }
+
+        std::string dir = std::string(home) + "/.battleship";
+
+        // Create directory if not exists
+        mkdir(dir.c_str(), 0700);
+
+        return dir + "/session.txt";
+    }
+
+public:
+    void saveSession(const std::string& session_token) {
+        std::string path = getSessionFilePath();
+        std::ofstream file(path, std::ios::trunc);
+
+        if (!file.is_open()) {
+            std::cerr << "Failed to save session\n";
+            return;
+        }
+
+        file << session_token;
+        file.close();
+
+        // Set restrictive permissions (owner read/write only)
+        chmod(path.c_str(), 0600);
+    }
+
+    std::string loadSession() {
+        std::string path = getSessionFilePath();
+        std::ifstream file(path);
+
+        if (!file.is_open()) {
+            return "";  // No saved session
+        }
+
+        std::string token;
+        std::getline(file, token);
+        file.close();
+
+        return token;
+    }
+
+    void clearSession() {
+        std::string path = getSessionFilePath();
+        unlink(path.c_str());
+    }
+};
+\end{lstlisting}
+
+\paragraph{Auto-Login Flow}
+
+\begin{enumerate}
+    \item On application startup, check for saved session file
+    \item If found, load session token
+    \item Send \texttt{VALIDATE\_SESSION} request to server
+    \item If valid, skip login screen and proceed to lobby
+    \item If invalid/expired, show login screen and delete saved session
+\end{enumerate}
+
+\begin{lstlisting}[style=cppstyle]
+void UIManager::attemptAutoLogin() {
+    std::string token = session_storage_.loadSession();
+
+    if (token.empty()) {
+        showLoginScreen();
+        return;
+    }
+
+    // Validate session with server
+    SessionValidateRequest req;
+    strncpy(req.session_token, token.c_str(), 63);
+    req.session_token[63] = '\0';
+
+    std::string payload = serialize(req);
+    network_->sendMessage(MessageType::VALIDATE_SESSION,
+                          payload);
+
+    // Wait for response (timeout: 5 seconds)
+    // If valid → showLobby()
+    // If invalid → showLoginScreen() + clearSession()
+}
+\end{lstlisting}
+
+\subsubsection{Database Schema}
+
+\paragraph{Users Table}
+
+\begin{lstlisting}[style=sqlstyle]
+CREATE TABLE users (
+    user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,  -- Format: salt$hash
+    display_name TEXT NOT NULL,
+    email TEXT,
+    elo_rating INTEGER DEFAULT 1000,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_login DATETIME
+);
+
+CREATE INDEX idx_username ON users(username);
+\end{lstlisting}
+
+% Database ERD belongs to Person 1 (Database Design section)
+
+\subsubsection{Security Considerations}
+
+\begin{itemize}
+    \item \textbf{Double Hashing}: Client SHA-256 + Server SHA-256 with salt
+    \item \textbf{Salt Randomness}: 16 bytes from OpenSSL RAND\_bytes (cryptographically secure)
+    \item \textbf{Session Expiration}: 24-hour timeout prevents indefinite sessions
+    \item \textbf{File Permissions}: Session file set to 0600 (owner-only)
+    \item \textbf{No Plaintext}: Passwords never transmitted or stored in plaintext
+    \item \textbf{SQL Injection}: Parameterized queries with prepared statements
+\end{itemize}

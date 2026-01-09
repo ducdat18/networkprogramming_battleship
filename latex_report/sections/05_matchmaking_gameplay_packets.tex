@@ -1,0 +1,286 @@
+\subsection{Matchmaking \& Gameplay Packets}
+
+This section covers the message structures for matchmaking (challenge system) and core gameplay (ship placement, moves, match results).
+
+\subsubsection{Matchmaking Packets}
+
+\paragraph{PlayerInfo\_Message (108 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+enum class PlayerStatus : uint8_t {
+    OFFLINE = 0,
+    ONLINE = 1,
+    AVAILABLE = 2,
+    IN_GAME = 3,
+    BUSY = 4
+};
+
+struct PlayerInfo_Message {
+    uint32_t user_id;
+    char username[32];
+    char display_name[64];
+    int32_t elo_rating;
+    PlayerStatus status;
+} __attribute__((packed));
+\end{lstlisting}
+
+\paragraph{PlayerListResponse (10,808 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct PlayerListResponse {
+    uint32_t count;                  // Number of players
+    PlayerInfo_Message players[100]; // Max 100 players
+} __attribute__((packed));
+\end{lstlisting}
+
+\paragraph{ChallengeRequest (12 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct ChallengeRequest {
+    uint32_t target_user_id;    // Player to challenge
+    uint32_t time_limit;        // Seconds per turn (0 = unlimited)
+    bool random_placement;      // Auto-place ships?
+} __attribute__((packed));
+\end{lstlisting}
+
+\paragraph{ChallengeReceived (88 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct ChallengeReceived {
+    uint32_t challenge_id;      // Unique challenge ID
+    uint32_t challenger_id;     // Who sent the challenge
+    char challenger_name[64];   // Challenger display name
+    int32_t challenger_elo;     // Challenger ELO rating
+    uint32_t time_limit;        // Game time limit
+    bool random_placement;      // Random ship placement?
+    uint64_t expires_at;        // Unix timestamp expiration
+} __attribute__((packed));
+\end{lstlisting}
+
+\paragraph{ChallengeResponse (8 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct ChallengeResponse {
+    uint32_t challenge_id;      // Which challenge
+    bool accepted;              // Accept or decline?
+} __attribute__((packed));
+\end{lstlisting}
+
+\paragraph{MatchStartMessage (84 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct MatchStartMessage {
+    uint32_t match_id;          // Unique match ID
+    uint32_t opponent_id;       // Opponent user ID
+    char opponent_name[64];     // Opponent display name
+    int32_t opponent_elo;       // Opponent ELO rating
+    uint32_t time_limit;        // Seconds per turn
+    bool you_go_first;          // True if you have first turn
+} __attribute__((packed));
+\end{lstlisting}
+
+\subsubsection{Gameplay Packets}
+
+\paragraph{Basic Structures}
+
+\begin{lstlisting}[style=cppstyle]
+struct Coordinate {
+    int8_t row;    // 0-9
+    int8_t col;    // 0-9
+} __attribute__((packed));
+
+enum class ShipType : uint8_t {
+    CARRIER = 0,      // Length 5
+    BATTLESHIP = 1,   // Length 4
+    CRUISER = 2,      // Length 3
+    SUBMARINE = 3,    // Length 3
+    DESTROYER = 4     // Length 2
+};
+
+enum class Orientation : uint8_t {
+    HORIZONTAL = 0,
+    VERTICAL = 1
+};
+
+struct Ship {
+    uint8_t type;           // ShipType
+    uint8_t orientation;    // Orientation
+    Coordinate position;    // Starting position (top-left)
+    uint8_t length;         // Ship length (2-5)
+    uint8_t hits;           // Damage taken (0-length)
+    bool is_sunk;           // All parts hit?
+} __attribute__((packed));
+\end{lstlisting}
+
+\paragraph{ShipPlacementMessage (50 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct ShipPlacementMessage {
+    uint32_t match_id;      // Which match
+    Ship ships[5];          // All 5 ships
+    bool ready;             // Ready to start?
+} __attribute__((packed));
+\end{lstlisting}
+
+\textbf{Validation Rules:}
+\begin{itemize}
+    \item All 5 ships must be placed
+    \item Ships must not overlap
+    \item Ships must be within 10x10 grid bounds
+    \item Each ship type used exactly once
+\end{itemize}
+
+\paragraph{MoveMessage (6 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct MoveMessage {
+    uint32_t match_id;      // Which match
+    Coordinate target;      // Attack coordinate
+} __attribute__((packed));
+\end{lstlisting}
+
+\paragraph{MoveResultMessage (25 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+enum class ShotResult : uint8_t {
+    MISS = 0,
+    HIT = 1,
+    SUNK = 2
+};
+
+struct MoveResultMessage {
+    uint32_t match_id;
+    uint32_t shooter_id;        // Who made the shot
+    Coordinate target;          // Where they shot
+    ShotResult result;          // Miss/Hit/Sunk
+    ShipType ship_sunk;         // If SUNK, which ship
+    uint32_t ships_remaining;   // Opponent ships left
+    bool game_over;             // All ships sunk?
+    uint32_t winner_id;         // Winner (if game_over)
+} __attribute__((packed));
+\end{lstlisting}
+
+\paragraph{TurnUpdateMessage (16 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+struct TurnUpdateMessage {
+    uint32_t match_id;
+    uint32_t current_player_id;    // Whose turn
+    uint32_t turn_number;          // Turn counter
+    uint32_t time_left;            // Seconds remaining
+} __attribute__((packed));
+\end{lstlisting}
+
+\paragraph{MatchEndMessage (168 bytes)}
+
+\begin{lstlisting}[style=cppstyle]
+enum class GameResult : uint8_t {
+    WIN = 0,
+    LOSS = 1,
+    DRAW = 2
+};
+
+enum class MatchEndReason : uint8_t {
+    NORMAL = 0,           // All ships sunk
+    RESIGN = 1,           // Player resigned
+    DISCONNECT = 2,       // Player disconnected
+    TIMEOUT = 3,          // Player timed out
+    DRAW_AGREED = 4       // Both players agreed to draw
+};
+
+struct MatchEndMessage {
+    uint32_t match_id;
+    GameResult result;           // WIN/LOSS/DRAW
+    uint32_t winner_id;          // 0 if draw
+    MatchEndReason reason;       // Why game ended
+    int32_t elo_change;          // +/- ELO points
+    int32_t new_elo;             // Updated ELO rating
+    uint32_t total_moves;        // Total shots fired
+    uint64_t duration;           // Match duration (seconds)
+    char reason_text[128];       // Human-readable reason
+} __attribute__((packed));
+\end{lstlisting}
+
+
+\subsubsection{Binary Representation Example}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\textwidth]{images/hex_dump_move.png}
+\caption{MoveMessage Binary Representation (6 bytes)}
+\label{fig:hex_move}
+\end{figure}
+
+\subsubsection{Example Gameplay Exchange}
+
+\textbf{Ship Placement Phase:}
+\begin{verbatim}
+Client A → Server: SHIP_PLACEMENT
+  ShipPlacementMessage {
+    match_id: 123,
+    ships: [
+      {type: CARRIER, orientation: HORIZONTAL, position: {0,0}, ...},
+      {type: BATTLESHIP, orientation: VERTICAL, position: {2,3}, ...},
+      ... (5 ships total)
+    ],
+    ready: true
+  }
+
+Server → Client A: SHIP_PLACEMENT (ack)
+  "Ships validated and stored"
+
+(Wait for Client B to place ships...)
+
+Server → Both: MATCH_READY
+  TurnUpdateMessage {
+    match_id: 123,
+    current_player_id: 42 (Client A),
+    turn_number: 1,
+    time_left: 300
+  }
+\end{verbatim}
+
+\textbf{Move Phase:}
+\begin{verbatim}
+Client A → Server: MOVE
+  MoveMessage {
+    match_id: 123,
+    target: {row: 5, col: 7}
+  }
+
+Server → Both: MOVE_RESULT
+  MoveResultMessage {
+    match_id: 123,
+    shooter_id: 42,
+    target: {5, 7},
+    result: HIT,
+    ship_sunk: NONE,
+    ships_remaining: 5,
+    game_over: false,
+    winner_id: 0
+  }
+
+Server → Both: TURN_UPDATE
+  TurnUpdateMessage {
+    match_id: 123,
+    current_player_id: 99 (Client B),
+    turn_number: 2,
+    time_left: 300
+  }
+\end{verbatim}
+
+\textbf{Match End:}
+\begin{verbatim}
+Server → Both: MATCH_END
+  MatchEndMessage {
+    match_id: 123,
+    result: WIN (for Client A) / LOSS (for Client B),
+    winner_id: 42,
+    reason: NORMAL,
+    elo_change: +15 (for winner), -10 (for loser),
+    new_elo: 1015 / 990,
+    total_moves: 48,
+    duration: 720,
+    reason_text: "All enemy ships destroyed"
+  }
+\end{verbatim}

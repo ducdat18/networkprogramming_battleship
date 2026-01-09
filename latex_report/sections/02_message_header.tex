@@ -1,0 +1,81 @@
+\subsection{Message Header Structure}
+
+Every message transmitted between client and server begins with a fixed-size header that provides essential metadata for message routing and processing.
+
+\subsubsection{Header Definition}
+
+The \texttt{MessageHeader} struct is defined in \texttt{common/include/protocol.h}:
+
+\begin{lstlisting}[style=cppstyle]
+struct MessageHeader {
+    uint8_t type;           // MessageType (1 byte)
+    uint32_t length;        // Payload length (4 bytes)
+    uint64_t timestamp;     // Unix timestamp (8 bytes)
+    char session_token[64]; // Session token (64 bytes)
+} __attribute__((packed));
+\end{lstlisting}
+
+The \texttt{\_\_attribute\_\_((packed))} directive ensures that the compiler does not insert padding bytes, guaranteeing a consistent 77-byte size across all platforms.
+
+\subsubsection{Field Descriptions}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|p{6cm}|}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Size} & \textbf{Purpose} \\ \hline
+type & uint8\_t & 1 byte & Identifies the message type (1-102) from MessageType enum \\ \hline
+length & uint32\_t & 4 bytes & Size of the payload in bytes (0-4096) \\ \hline
+timestamp & uint64\_t & 8 bytes & Unix epoch timestamp (seconds since 1970-01-01) for message ordering and timeout detection \\ \hline
+session\_token & char[64] & 64 bytes & Authentication token for authenticated requests (empty for AUTH messages) \\ \hline
+\textbf{Total} & & \textbf{77 bytes} & Fixed-size header \\ \hline
+\end{tabular}
+\caption{MessageHeader Field Details}
+\label{tab:message_header_fields}
+\end{table}
+
+\subsubsection{Header Creation}
+
+The protocol provides two types of headers:
+\begin{itemize}
+    \item \textbf{Basic Header}: For unauthenticated messages (registration, login) - session\_token is empty
+    \item \textbf{Authenticated Header}: For all other messages - includes session\_token for validation
+\end{itemize}
+
+\subsubsection{Memory Layout Visualization}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{images/message_header_layout.png}
+\caption{MessageHeader Memory Layout with Byte Offsets}
+\label{fig:header_layout}
+\end{figure}
+
+\subsubsection{Message Transmission Flow}
+
+\textbf{Sending Process:}
+\begin{enumerate}
+    \item Create header with message type and payload size
+    \item Serialize payload to binary
+    \item Send header (77 bytes) via \texttt{send()}
+    \item Send payload (variable bytes) via \texttt{send()}
+\end{enumerate}
+
+\textbf{Receiving Process:}
+\begin{enumerate}
+    \item Receive header (77 bytes) via \texttt{recv()} with \texttt{MSG\_WAITALL}
+    \item Validate header (type, length, timestamp)
+    \item Receive payload based on \texttt{header.length}
+    \item Deserialize and process message
+\end{enumerate}
+
+\subsubsection{Header Validation}
+
+Before processing any message, the receiver validates:
+\begin{itemize}
+    \item \textbf{Type}: Must be 1-102 (valid MessageType)
+    \item \textbf{Length}: Must be ≤ 4096 bytes (prevent buffer overflow)
+    \item \textbf{Timestamp}: Not too old (>1 hour) or in future (>1 minute)
+\end{itemize}
+
+Invalid headers are rejected to prevent malformed messages from corrupting system state.

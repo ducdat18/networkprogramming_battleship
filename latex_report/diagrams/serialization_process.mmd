@@ -1,0 +1,44 @@
+%%{init: {'theme':'base'}}%%
+graph TB
+    subgraph Send["Sending Process"]
+        direction TB
+
+        S1["1. Create Struct in Memory<br/>LoginRequest login;<br/>strcpy(login.username, 'alice');"]
+        S2["2. Serialize to Binary<br/>string payload = serialize(login);<br/>→ 96 bytes raw memory"]
+        S3["3. Create Header<br/>MessageHeader hdr;<br/>hdr.type = AUTH_LOGIN;<br/>hdr.length = 96;"]
+        S4["4. Send Header (77 bytes)<br/>send(sock, &hdr, 77, 0);"]
+        S5["5. Send Payload (96 bytes)<br/>send(sock, payload.data(), 96, 0);"]
+
+        S1 --> S2 --> S3 --> S4 --> S5
+    end
+
+    subgraph Network["TCP Network"]
+        N["173 bytes transmitted<br/>(77 header + 96 payload)"]
+    end
+
+    subgraph Recv["Receiving Process"]
+        direction TB
+
+        R1["1. Receive Header (77 bytes)<br/>MessageHeader hdr;<br/>recv(sock, &hdr, 77, MSG_WAITALL);"]
+        R2["2. Validate Header<br/>Check: type valid?<br/>Check: length ≤ 4096?"]
+        R3["3. Receive Payload<br/>string payload(hdr.length);<br/>recv(sock, &payload[0], hdr.length);"]
+        R4["4. Deserialize<br/>LoginRequest login;<br/>deserialize(payload, login);"]
+        R5["5. Process Message<br/>handleLogin(login);"]
+
+        R1 --> R2 --> R3 --> R4 --> R5
+    end
+
+    S5 -->|TCP socket| N
+    N -->|TCP socket| R1
+
+    style Send fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style Network fill:#fff3e0,stroke:#ef6c00,stroke-width:3px
+    style Recv fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+
+    style S2 fill:#ffcccc
+    style S4 fill:#fff59d
+    style S5 fill:#b3e5fc
+
+    style R2 fill:#fff59d
+    style R4 fill:#ffcccc
+    style R5 fill:#c5e1a5
